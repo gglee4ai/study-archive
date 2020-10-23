@@ -1,0 +1,117 @@
+---
+title: "Bootstrap resampling and tidy regression models"
+date: 2020-05-22
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r}
+ggplot(mtcars, aes(mpg, wt)) +
+  geom_point()
+```
+
+```{r}
+nlsfit <- nls(mpg ~ k / wt + b, mtcars, start = list(k = 1, b = 0))
+summary(nlsfit)
+```
+
+```{r}
+ggplot(mtcars, aes(wt, mpg)) +
+  geom_point() +
+  geom_line(aes(y = predict(nlsfit)))
+```
+
+```{r}
+set.seed(27)
+boots <- bootstraps(mtcars, times = 2000, apparent = TRUE)
+boots
+```
+
+```{r}
+fit_nls_on_bootstrap <- function(split) {
+  nls(mpg ~ k / wt + b, analysis(split), start = list(k = 1, b = 0))
+}
+```
+
+```{r}
+boot_models <- boots %>%
+  mutate(
+    model = map(splits, fit_nls_on_bootstrap), 
+    coef_info = map(model, tidy)
+  )
+boot_models
+```
+
+```{r}
+boot_coefs <-
+  boot_models %>%
+unnest(coef_info)
+boot_coefs
+```
+
+```{r}
+percentile_intervals <- int_pctl(boot_models, coef_info)
+percentile_intervals
+```
+
+```{r}
+ggplot(boot_coefs, aes(estimate)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~ term, scales = "free") +
+  geom_vline(aes(xintercept = .lower), data = percentile_intervals, col = "blue") +
+  geom_vline(aes(xintercept = .upper), data = percentile_intervals, col = "blue")
+```
+
+```{r}
+boot_aug <-
+  boot_models %>% 
+  sample_n(200) %>% 
+  mutate(augmented = map(model, augment)) %>% 
+  unnest(augmented)
+```
+
+```{r}
+ggplot(boot_aug, aes(wt, mpg)) +
+  geom_line(aes(y = .fitted, group = id), alpha = .1, color = "blue") +
+  geom_point()
+```
+
+```{r}
+fit_spline_on_bootstrap <- function(split) {
+  data <- analysis(split)
+  smooth.spline(data$wt, data$mpg, df = 4)
+}
+```
+
+```{r}
+boot_splines <-
+  boots %>% 
+  sample_n(200) %>% 
+  mutate(
+    spline = map(splits, fit_spline_on_bootstrap),
+    aug_train = map(spline, augment)
+  )
+boot_splines
+```
+
+```{r}
+splines_aug <-
+  boot_splines %>% 
+  unnest(aug_train)
+splines_aug
+```
+
+```{r}
+ggplot(splines_aug, aes(x, y)) +
+  geom_line(aes(y = .fitted, group = id), alpha = 0.1, col = "blue") +
+  geom_point()
+```
+
+
+
+
+

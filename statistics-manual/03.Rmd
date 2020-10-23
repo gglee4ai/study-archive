@@ -1,0 +1,276 @@
+---
+title: "Chapter 3"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+simga_x <- 1
+
+
+rnorm(10, mean = 0, sd = 1)
+```
+
+
+```{r}
+res <- list()
+for (i in 1:100000) {
+  sample1 <- rnorm(10, mean = 0, sd = 1)
+  res[[i]] <- mean(sample1)  
+}
+res <- unlist(res)
+```
+
+```{r}
+sd(res)
+```
+
+```{r}
+1 / sqrt(10)
+```
+
+```{r}
+n <- 100000
+r1 <- vector("double", n)
+r2 <- vector("double", n)
+y <- vector("double", n)
+for (i in 1:100000) {
+  x1 <- rnorm(10, 10, 1)
+  x2 <- rnorm(10, 5, 1)  
+  r1[i] <- sd(x1)
+  r2[i] <- sd(x2)
+  y[i] <- mean(x1) - mean(x2)
+}
+```
+
+
+```{r}
+var(y)
+```
+
+
+
+```{r}
+(1 / 10 + 1 / 10)
+```
+
+
+
+
+
+
+## 3.2 χ2 Test for σ in a Normal Distribution
+
+### 3.2.2 One variace chi-square test
+```{r}
+xi <- c(0.516, 0.508, 0.517, 0.529, 0.501, 
+        0.521, 0.539, 0.509, 0.521, 0.532, 
+        0.547, 0.504, 0.525)
+```
+
+```{r}
+chisq.test(table(xi))
+```
+
+
+
+---------------
+CF) R로 구현하기 위해서 다음의 링크 참조
+
+* https://rpubs.com/mpfoley73/460916
+
+```{r}
+x <- c(12.43, 11.71, 14.41, 11.05, 9.53, 
+       11.66, 9.33, 11.71, 14.35, 13.81)
+(x_bar <- mean(x))
+```
+
+```{r}
+s <- sd(x)
+s
+```
+
+```{r}
+n <- length(x)
+n
+```
+
+```{r}
+df <- n - 1
+alpha <- 0.05
+sigma <- 1.00
+qqnorm(x)
+qqline(x)
+```
+
+```{r}
+#install.packages("nortest")
+nortest::ad.test(x) 
+```
+
+```{r}
+EnvStats::varTest(x = x, alternative = "two.sided", sigma.squared = sigma^2, conf.level = 1 - alpha)
+```
+
+```{r}
+(lcl = (n - 1) * s^2 / qchisq(p = alpha / 2, df = df, lower.tail = FALSE))
+```
+
+
+```{r}
+(ucl = (n - 1) * s^2 / qchisq(p = alpha / 2, df = df, lower.tail = TRUE))
+```
+
+```{r}
+s_rnd = round(s, 2)
+dat <- data.frame(chi_sq = 100:3000 / 100) %>%
+  mutate(sigma_sq = (n - 1) * s^2 / chi_sq) %>%
+  mutate(prob = dchisq(x = chi_sq, df = df)) %>%
+  mutate(rr = ifelse(sigma_sq < lcl | sigma_sq > ucl, prob, 0))
+ggplot(dat) +
+  geom_line(aes(x = chi_sq, y = prob)) +
+  geom_area(aes(x = chi_sq, y = rr), alpha = 0.3) +
+  geom_vline(aes(xintercept = (n - 1)), color = "blue") +
+  labs(title = bquote('95% Interval Estimate'),
+       subtitle = bquote('s^2 = '~.(s_rnd^2)~' LCL'~.(lcl)~' UCL'~.(ucl)~' using chisq dist with'~.(df)~'df.'),
+       x = "chi^2",
+       y = "Probability") +
+  scale_x_continuous(breaks = c(1, (n - 1), 30), labels = dat$sigma_sq[c(1, (n - 1) * 100 - 100, 2900)])
+```
+
+```{r}
+# Hypothesis test graph
+lcl = (n - 1) * sigma^2 / qchisq(p = alpha / 2, df = df, lower.tail = FALSE)
+ucl = (n - 1) * sigma^2 / qchisq(p = alpha / 2, df = df, lower.tail = TRUE)
+data.frame(chi_sq = 100:3000 / 100) %>%
+  mutate(sigma_sq = (n - 1) * sigma^2 / chi_sq) %>%
+  mutate(prob = dchisq(x = chi_sq, df = df)) %>%
+  mutate(rr = ifelse(sigma_sq < lcl | sigma_sq > ucl, prob, 0)) %>%
+ggplot() +
+  geom_line(aes(x = chi_sq, y = prob)) +
+  geom_area(aes(x = chi_sq, y = rr), alpha = 0.3) +
+  geom_vline(aes(xintercept = (n - 1)), color = "blue") +
+  geom_vline(aes(xintercept = (n - 1) * s^2 / sigma^2), color = "red") +
+  labs(title = bquote('Hypothesis Test of H0: sigma^2 = 1'),
+       subtitle = bquote('s^2 = '~.(s_rnd^2)~' LCL'~.(lcl)~' UCL'~.(ucl)~' using chisq dist with'~.(df)~'df.'),
+       x = "chi^2",
+       y = "Probability") +
+  theme(legend.position="none")
+```
+
+------------------------
+
+```{r}
+## 요게 핵심임
+EnvStats::varTest(x = xi, sigma.squared = 0.01^2)
+```
+
+
+```{r}
+## one-sided
+EnvStats::varTest(x = xi, sigma.squared = 0.01^2, alternative = "greater")
+```
+
+* 양측 검정일 경우, 귀무가설 기각 불가
+* 단측 검정일 경우, 귀무가설 기각
+
+```{r}
+qchisq(0.95, df = 12) # 21.03 
+```
+
+
+### 3.2.3 Confidence Intervals
+
+```{r}
+n <- 20
+s <- 11
+qchisq(0.025, df = n - 1, lower.tail = FALSE)
+(qchisq(0.975, df = n - 1, lower.tail = FALSE))
+```
+
+
+## F Test for σ1/σ2 for Normal Distributions
+
+### 3.3.2
+
+example
+```{r}
+(s1_sqr <- 2237.29)
+(s2_sqr <- 1346.89)
+(F <- s1_sqr / s2_sqr)
+```
+
+```{r}
+qf(p = .025 ,df1 = 30, df2 = 60, lower.tail = FALSE)
+qf(p = .025 ,df1 = 30, df2 = 60, lower.tail = TRUE)
+qf(p = .975 ,df1 = 30, df2 = 60, lower.tail = FALSE)
+qf(p = .975 ,df1 = 30, df2 = 60, lower.tail = TRUE)
+```
+
+```{r}
+v1 <- 40.2
+v2 <- 12.3
+(F_stat <- v1 / v2)
+```
+
+```{r}
+qf(p = 0.05, df1 = 15, df2 = 15, lower.tail = FALSE)
+```
+
+가상 실험을 해보면, 내가 한 내용이 잘못됨
+
+
+```{r}
+n <- 10000
+F_values <- list()
+var1_list <- list()
+for (i in 1:n) {
+  sample1 <- rnorm(16, mean = 100, sd = sqrt(v1)*4)
+  sample2 <- rnorm(16, mean = 0, sd = sqrt(v2)*4)
+  #F_values[[i]] <- var.test(sample1, sample2)$statistic
+  var1 <- var(sample1) # 이게 sample을 통해서 얻었기 때문에 축소됨
+  var2 <- var(sample2)
+  var1_list[[i]] <- var1
+  
+  if (var1 > var2) {
+    F_values[[i]] <- var1 / var2
+  } else {
+    F_values[[i]] <- var2 / var1
+  }
+}
+sum(F_values > 2.403447)
+```
+
+```{r}
+sd(unlist(var1_list))
+```
+
+
+
+```{r}
+r <- list()
+for (i in 1:10000) {
+  sample1 <- rnorm(16, mean = 100, sd = 10)
+  r[[i]] <- mean(sample1)  
+}
+r <- unlist(r)
+sd(r)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

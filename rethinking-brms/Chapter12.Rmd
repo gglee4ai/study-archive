@@ -1,0 +1,66 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(rethinking)
+data(reedfrogs)
+d <- reedfrogs
+```
+
+```{r}
+d$tank <- 1:nrow(d)
+d
+```
+
+```{r, warning=FALSE, message=FALSE}
+m12.1 <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- a_tank[tank],
+    a_tank[tank] ~ dnorm(0, 5)
+  ), 
+  data = d 
+)
+```
+
+```{r}
+precis(m12.1, depth = 2)
+```
+
+```{r, warning=FALSE, message=FALSE}
+m12.2 <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- a_tank[tank],
+    a_tank[tank] ~ dnorm(a, sigma),
+    a ~ dnorm(0, 1),
+    sigma ~ dcauchy(0, 1)
+  ), 
+  data = d,
+  iter = 4000, 
+  chain = 4
+)
+```
+
+```{r}
+compare(m12.1, m12.2)
+```
+
+```{r, warning=FALSE, message=FALSE}
+m12.3 <- map2stan(
+  alist(
+    surv ~ dbinom(density, p),
+    logit(p) <- a_tank[tank],
+    a_tank[tank] ~ dnorm(a, sigma),
+    a ~ dnorm(b, bs),
+    b ~ dnorm(0, 1),
+    bs ~ dcauchy(0, 1),
+    sigma ~ dcauchy(0, 1)
+  ), 
+  data = d,
+  iter = 4000, 
+  chain = 4
+)
+```

@@ -1,0 +1,261 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+mydata <- read_csv("input/primer.csv")
+```
+
+```{r}
+mydata %>%
+  ggplot(aes(x = x, y = y, color = as.factor(gid))) +
+  geom_point()
+```
+
+
+```{r}
+summary(lm(y ~ x, data = mydata))
+```
+
+
+```{r}
+by_gid <- 
+  mydata %>%
+  group_by(gid) %>%
+  nest()
+by_gid
+```
+
+```{r}
+by_gid <-
+  by_gid %>%
+  mutate(lm = map(data, function(df) { lm(y ~ x, data = df) }))
+by_gid
+```
+
+```{r}
+library(modelr)
+by_gid <-
+  by_gid %>%
+  mutate(resid = map2(data, lm, add_residuals))
+by_gid
+```
+
+```{r}
+library(broom)
+```
+
+```{r}
+by_gid <-
+  by_gid %>%
+  mutate(tidied = map(lm, tidy))
+```
+
+```{r}
+by_gid %>%
+  unnest(tidied)
+```
+
+
+```{r}
+summary(by_gid$lm[[1]])
+```
+
+
+```{r}
+library(lme4)
+summary(lmer(y ~ 1 + x + (1 | gid), data = mydata))
+```
+
+
+```{r}
+clus2 <- read_csv("input/my2level_cluster.csv")
+clus2
+```
+
+```{r}
+clus2 %>% glimpse()
+```
+
+```{r}
+table(clus2$gid)
+```
+
+```{r}
+clus2 %>% count(gid)
+```
+
+```{r}
+rpt2 <- read_csv("input/my2level_repeat.csv")
+rpt2
+```
+
+
+```{r}
+rpt2long <-
+  rpt2 %>%
+  gather(key = time, value = y, -pid, -female) %>%
+  mutate(time = as.integer(str_remove(time, "y")))
+rpt2long
+```
+
+```{r}
+rpt2long %>% summary()
+```
+
+
+```{r}
+by_gid
+```
+
+```{r}
+values <- 
+  by_gid %>% 
+  unnest(tidied) %>%
+  select(gid, term, estimate) %>%
+  group_by(gid) %>%
+  spread(term, estimate) 
+values
+
+
+values %>%
+  ungroup() %>%
+  summarise(
+    var_b0 = var(`(Intercept)`),
+    var_b1 = var(x)
+  )
+```
+
+```{r}
+mydata <- read_csv("input/mean_centering.csv")
+round(cor(mydata), 3)
+```
+
+```{r}
+mydata <-
+  mydata %>%
+  mutate(
+    x1c = x1 - mean(x1),
+    x2c = x2 - mean(x2)
+  )
+```
+
+```{r}
+mydata %>% 
+  select(y, x1, x1c) %>%
+  gather(key = x, value = value, -y) %>%
+  ggplot(aes(x = value, y = y)) +
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) +
+  #geom_hline(yintercept = 0) +
+  #geom_vline(xintercept = 0) +
+  facet_wrap(~x, ncol = 1)
+  # geom_point(aes(x = x2))
+```
+
+```{r}
+m1 <- lm(y ~ x1, data = mydata)
+m2 <- lm(y ~ x1c, data = mydata)
+```
+
+```{r}
+summary(m1)
+summary(m2)
+```
+
+```{r}
+bind_rows(tidy(m1), tidy(m2)) %>%
+  mutate(model = rep(1:2, each = 2)) %>%
+  select(model, everything())
+```
+
+```{r}
+m1 <- lm(y ~ 1 + x1 + x2, data = mydata)
+m1
+```
+
+```{r}
+m2 <- lm(y ~ 1 + x1 * x2, data = mydata)
+m2
+```
+
+```{r}
+m3 <- lm(y ~ 1 + x1c + x2c, data = mydata)
+m3
+```
+
+
+```{r}
+m4 <- lm(y ~ 1 + x1c + x2c + x1c:x2c, data = mydata)
+m4
+```
+
+
+```{r}
+mydata <- read_csv("input/primer.csv")
+mydata <- 
+  mydata %>%
+  mutate(x_grandmean = mean(x)) %>%
+  group_by(gid) %>%
+  mutate(
+    x_groupmean = mean(x),
+    x_am = x - x_grandmean,
+    x_gm = x - x_groupmean
+  ) %>%
+  ungroup()
+mydata
+```
+
+```{r}
+mydata %>%
+  select(x, x_am, x_gm) %>%
+  cor()
+```
+
+```{r}
+mydata %>%
+  ggplot(aes(x_gm, y, color = as.factor(gid))) +
+  geom_point()
+```
+
+```{r}
+rpt2 <- read_csv("input/my2level_repeat.csv")
+rpt2
+```
+
+```{r}
+#rpt2long <-
+  rpt2 %>%
+  gather(key = time, value = y, -pid, -female) %>%
+  mutate(
+    time = as.numeric(str_remove(time, "y")),
+    time_gm = time - mean(time)
+  ) %>%
+  arrange(pid)
+```
+
+```{r}
+clus2 <- read_csv("input/my2level_cluster.csv")
+clus2 <-
+  clus2 %>%
+  group_by(gid) %>%
+  mutate(
+    ix1_gm = ix1 - mean(ix1),
+    ix2_gm = ix2 - mean(ix2)
+  ) %>%
+  arrange(gid)
+clus2
+```
+
+```{r}
+clus2 %>%
+  mutate(group_size = n()) %>%
+  summarise(mean(gx1), mean(group_size))
+```
+
+

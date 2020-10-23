@@ -1,0 +1,58 @@
+TTSDBALL + KORSUV
+--------------------------------------------------------
+```{r}
+source("tts_model.R")
+require(gdata)
+TTSDBALL <- read.xls("DB/TTSDatabase8-04R1_KORSUV_20150406.xlsx", 
+                     header=TRUE, 
+                     na.strings=c("", " ", "-999", "-999.000000000000000"))
+
+# Remove outliers from EASON
+# Eason, Data not used in 1-06 calibration or validation
+# irradiated in both BWR & PWR at diffrent flux
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "PMON01" & TTSDBALL$Hrs_used==78366),]
+# unusally high flux(highest inthe Database), well above expected application range
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "PBR_01" & TTSDBALL$Hrs_used==18290),] 
+# irradiated in 2 PWRs at different Tc
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "WTP301" & TTSDBALL$Hrs_used==121107),]
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "WZN101" & TTSDBALL$Hrs_used==125829),]
+# Chauvenet outliers in previous fitting efforts
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "WCK101" & TTSDBALL$Hrs_used==80556),]
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "WSQ201" & TTSDBALL$Hrs_used==25528),]
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "WCK101" & TTSDBALL$Hrs_used==11111),]
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "WTM201" & TTSDBALL$Hrs_used==46608),]
+# Chauvenet outliers in 1-06 fitting efforts
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "FGIN02" & TTSDBALL$Hrs_used==60278),]
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "WCL101" & TTSDBALL$Hrs_used==9222),]
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "WFA201" & TTSDBALL$Hrs_used==56389),]
+TTSDBALL <- TTSDBALL[!(TTSDBALL$HEAT_ID == "WFA201" & TTSDBALL$Hrs_used==116062),]
+```
+
+```{r}
+ks# KORSUV DB
+ks <- subset(TTSDBALL, Dataset=="KORSUV", select=c("PLANT_ID", "PROD_ID", "SPEC_ORI","CU", "NI", "P", "Tc", "CAP_F1", "Hrs_used", "DTT30"))
+colnames(ks) <- c("plant", "form", "orientation", "Cu", "Ni", "P", "Tc", "fluence", "ti", "dTm")
+ks$fl <- ks$fluence / 1e19
+ks$plant <- factor(ks$plant)
+ks$form <- factor(ks$form)
+ks$orientation <- factor(ks$orientation)
+ksp <- ks[ks$form!="W",]
+
+require(nlme)
+rs <- groupedData(dTm ~ fluence|plant/form/orientation, ks)
+plot(rs)
+#ks$dTp <- with(ks, CR6551(form, Cu, Ni, P, Tc, fluence, ti))  # predicted TTS
+#ks$res <- with(ks, dTm - dTp)  # residual
+```
+
+```{r}
+l# Low Cu DB
+lc <- subset(TTSDBALL, CU <= 0.072 & Dataset != "KORSUV", select=c("Dataset", "PLANT_ID", "PROD_ID", "SPEC_ORI","CU", "NI", "P", "Tc", "CAP_F1", "Hrs_used", "DTT30"))
+colnames(lc) <- c("dataset", "plant", "form", "orientation", "Cu", "Ni", "P", "Tc", "fluence", "ti", "dTm")
+lc$fl <- lc$fluence / 1e19
+lc$plant <- factor(lc$plant)
+lc$form <- factor(lc$form)
+lcp <- lc[lc$form != "W",]
+rs <- groupedData(dTm ~ fluence | type, lc)
+plot(rs)
+```

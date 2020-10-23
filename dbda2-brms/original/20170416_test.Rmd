@@ -1,0 +1,143 @@
+---
+title: "test"
+author: "GGLee"
+date: "April 13, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+require(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+x <- rnorm(100, 70, 20)
+mydata <- list(x=x, N=length(x))
+
+code <- '
+ data {
+ int N;
+ real x[N];
+ }
+ parameters {
+   real mu;
+   real<lower=0> sigma;
+ }
+ model {
+   for(i in 1:N){
+     x[i] ~ normal(mu,sigma);
+   }
+ }
+'
+fit <- stan(model_code=code, iter=100000, chains=4, data=mydata)
+
+post <- extract(fit)
+hist(post$mu)
+hist(post$sigma)
+
+```
+
+
+```{r}
+#ToothGrowth
+
+vc <- subset(ToothGrowth, supp=='VC')
+oj <- subset(ToothGrowth, supp=='OJ')
+tg <- list(N=30, vc=vc$len, oj=oj$len)
+code <- '
+ data {
+ int N;
+ real vc[N];
+ real oj[N];
+ }
+ parameters {
+   real mu1;
+   real mu2;
+   real<lower=0> sigma1;
+   real<lower=0> sigma2;
+ }
+ model {
+   for(i in 1:N){
+     vc[i] ~ normal(mu1,sigma1);
+     oj[i] ~ normal(mu2,sigma2);
+   }
+ }
+ generated quantities {
+   real mu_dif;
+   mu_dif = mu1-mu2;
+ }
+'
+fit <- stan(model_code=code, data=tg, iter=1000, chains=4)
+
+post <- extract(fit)
+par(mfrow=c(2,2))
+hist(post$mu1)
+hist(post$mu2)
+hist(post$sigma1)
+hist(post$sigma2)
+```
+
+
+```{r}
+N = 500
+pHead = 0.5
+flipSequence = sample( x=c(0, 1), prob=c(1-pHead, pHead), size=N, replace=TRUE)
+r <- cumsum(flipSequence)
+n = 1:N
+runProp = r / n
+plot(n, runProp, type='o', log='x', col='skyblue', xlim=c(1,N), ylim=c(0,1), cex.axis=1.5, main='Flip Number', ylab='Proportion Heads', cex.lab=1.5)
+abline( h=pHead, lty='dotted')
+flipLetters = paste(c('T','H')[flipSequence[1:10]+1], collapse='')
+displayString = paste0( "Flip Sequence = ", flipLetters, "...")
+text(N, .9, displayString, adj=c(1, 0.5), cex=1.3)
+text(N, .8, paste('End Porportion = ', runProp[N]), adj=c(1, 0.5), cex=1.3)
+```
+
+
+
+```{r}
+post.prob <- function(s, prior) {
+  if (s==1) {
+    post <- 0.95 * prior / (0.95 * prior + 0.7 * (1-prior))
+  } else {
+    post <- 0.05 * prior / (0.05 * prior + 0.3 * (1-prior)) 
+  }
+  return (post)
+}
+prior <- c(1:13)
+post <- c(1:12)
+data <- c(1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0)
+prob <- matrix(0, 12, 2)
+prior[1] <- 0.9
+for (i in 1:12) {
+  post[i] <- post.prob(data[i], prior[i])
+  prob[i,] <- c(prior[i], post[i])
+  prior[i+1] <- post[i]
+}
+```
+
+
+
+
+```{r}
+a <-1
+b <- 1
+n <- 40
+x <- 15
+theta <- seq(0, 1, length=50)
+prior.theta <- dbeta(theta, a, b)
+
+
+
+```
+
+
+
+```{r}
+load('DBDA2E-utilities.R')
+```
+

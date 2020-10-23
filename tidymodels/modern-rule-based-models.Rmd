@@ -1,0 +1,33 @@
+---
+title: "Modern Rule-Based Models"
+date: 2020-05-26
+output: html_notebook
+---
+
+```{r}
+for (pkg in c("dplyr", "modeldata", "rpart")) {
+  if (!requireNamespace(pkg)) {
+    install.packages(pkg)
+  }
+}
+```
+
+```{r}
+library(dplyr)
+data(Sacramento, package = "modeldata")
+Sacramento
+```
+
+```{r}
+Sacramento <-
+  Sacramento %>% 
+  mutate(price = log10(price)) %>% 
+  select(-zip, -city)
+str(Sacramento)
+```
+
+```{r}
+library(rpart)
+rpart(price ~ ., data = Sacramento)
+```
+

@@ -1,0 +1,56 @@
+---
+title: "ggplot2 geom_contour"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+faithfuld
+```
+```{r}
+faithfuld %>% count(eruptions)
+```
+
+```{r}
+faithfuld %>% count(waiting)
+```
+```{r}
+v <- ggplot(faithfuld, aes(waiting, eruptions, z = density))
+v + geom_contour()
+v + geom_contour_filled(bins = 10) #+
+  #scale_fill_viridis_c()
+```
+
+```{r}
+faithful %>% 
+  ggplot(aes(waiting, eruptions)) + 
+  geom_density_2d()
+```
+
+```{r}
+v + geom_contour_filled(bins = 10) #+
+```
+
+```{r}
+v + geom_contour(binwidth = 0.001) #+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

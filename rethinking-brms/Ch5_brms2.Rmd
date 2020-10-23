@@ -1,0 +1,1029 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(rethinking)
+data(WaffleDivorce)
+d <- WaffleDivorce
+rm(WaffleDivorce)
+detach(package:rethinking, unload = T)
+library(brms)
+library(tidyverse)
+```
+
+```{r}
+d
+```
+
+```{r}
+library(ggrepel)
+
+d %>%
+  ggplot(aes(x = WaffleHouses / Population, y = Divorce)) +
+  stat_smooth(method = "lm", fullrange = T, size = 1/2,
+              color = "firebrick4", fill = "firebrick", alpha = 1/5) +
+  geom_point(size = 1.5, color = "firebrick4", alpha = 1/2) +
+  geom_text_repel(data = d %>% filter(Loc %in% c("ME", "OK", "AR", "AL", "GA", "SC", "NJ")),  
+                  aes(label = Loc), 
+                  size = 3, seed = 1042) +  # this makes it reproducible
+  coord_cartesian(xlim = 0:50, ylim = 5:15) +
+  scale_x_continuous("Waffle Houses per million", limits = c(0, 55)) +
+  ylab("Divorce rate") +
+  theme_bw() +
+  theme(panel.grid = element_blank())  
+```
+
+
+```{r}
+d <- d %>%
+  mutate(
+    MedianAgeMarriage_s = (MedianAgeMarriage - mean(MedianAgeMarriage)) / sd (MedianAgeMarriage)
+  )
+```
+
+```{r}
+b5.1 <-
+  brm(
+    Divorce ~ 1 + MedianAgeMarriage_s,
+    data = d, family = gaussian,
+    prior = c(
+      prior(normal(10, 10), class = Intercept),
+      prior(normal(0, 1), class = b),
+      prior(uniform(0, 10), class = sigma)
+    ),
+    iter = 2000, warmup = 500, chains = 4, cores = 4,
+    seed = 5
+  )
+```
+
+```{r}
+summary(b5.1)
+```
+
+```{r}
+nd <- tibble(MedianAgeMarriage_s = seq(-3, 3.5, length.out = 30))
+
+f <- fitted(b5.1, newdata = nd) %>%
+  as_tibble() %>%
+  bind_cols(nd, .)
+
+f %>%
+  ggplot(aes(MedianAgeMarriage_s, Estimate)) +
+  geom_smooth(
+    aes(ymin = Q2.5, ymax = Q97.5), stat = "identity", 
+    fill = "firebrick", color = "firebrick4", alpha = 1/5, size = 1/4
+  ) +
+  geom_point(data = d, aes(y = Divorce), size = 2, color = "firebrick4") +
+  coord_cartesian(
+    xlim = range(d$MedianAgeMarriage_s),
+    ylim = range(d$Divorce)
+  ) + 
+  ylab("Divorce") + 
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+
+```{r}
+d <- d %>%
+  mutate(Marriage_s = (Marriage - mean(Marriage)) / sd(Marriage))
+
+b5.2 <- 
+  brm(
+    Divorce ~ 1 + Marriage_s,
+    data = d, family = gaussian,
+    prior = c(
+      prior(normal(10, 10), class = Intercept),
+      prior(normal(0, 1), class = b),
+      prior(uniform(0, 10), class = sigma)
+    ),
+    iter = 2000, warmup = 500, chains = 4, cores = 4,
+    seed = 5
+  )
+```
+
+```{r}
+summary(b5.2)
+```
+
+
+```{r}
+nd <- tibble(Marriage_s = seq(-3, 3.5, length.out = 30))
+
+f <- fitted(b5.2, newdata = nd) %>%
+  as_tibble() %>%
+  bind_cols(nd, .)
+
+f %>%
+  ggplot(aes(Marriage_s, Estimate)) +
+  geom_smooth(
+    aes(ymin = Q2.5, ymax = Q97.5), stat = "identity", 
+    fill = "firebrick", color = "firebrick4", alpha = 1/5, size = 1/4
+  ) +
+  geom_point(data = d, aes(y = Divorce), size = 2, color = "firebrick4") +
+  coord_cartesian(
+    xlim = range(d$MedianAgeMarriage_s),
+    ylim = range(d$Divorce)
+  ) + 
+  ylab("Divorce") + 
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+b5.3 <-
+  brm(
+    Divorce ~ 1 + Marriage_s + MedianAgeMarriage_s,
+    data = d, family = gaussian,
+    prior = c(
+      prior(normal(10, 10), class = Intercept),
+      prior(normal(0, 1), class = b),
+      prior(uniform(0, 10), class = sigma)
+    ),
+    iter = 2000, warmup = 500, chains = 4, cores = 4,
+    seed = 5
+  )
+```
+
+```{r}
+summary(b5.3)
+```
+
+```{r}
+stanplot(b5.3)
+```
+
+```{r}
+library(bayesplot)
+```
+
+```{r}
+post <- posterior_samples(b5.3)
+
+color_scheme_set("red")
+mcmc_intervals(post[, 1:4], prob = .5, point_est = "median") +
+  labs(title = "My fancy bayesplot-based coeeficient plot") +
+  theme(
+    axis.text.y = element_text(hjust = 0),
+    axis.line.x = element_line(size = 1 / 4),
+    axis.line.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+```
+
+```{r}
+library(tidybayes)
+
+post %>%
+  select(-lp__) %>%
+  gather() %>%
+  ggplot(aes(value, reorder(key, value))) +
+  geom_vline(xintercept = 0, color = "firebrick4", alpha = 1/10) +
+  stat_pointintervalh(
+    point_interval = mode_hdi, .width = .95,
+    size = 3/4, color = "firebrick4"
+  ) +
+  labs(title = "My tidybayes-based coefficient plot", x = NULL, y = NULL) +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    panel.grid.major.y = element_line(color = alpha("firebrick4", 1/4), linetype = 3),
+    axis.text.y = element_text(hjust = 0),
+    axis.ticks.y = element_blank()
+  )
+```
+
+
+```{r}
+b5.4 <-
+  brm(
+    Marriage_s ~ 1 + MedianAgeMarriage_s,
+    data = d, family = gaussian,
+    prior = c(
+      prior(normal(0, 10), class = Intercept),
+      prior(normal(0, 1), class = b),
+      prior(uniform(0, 10), class = sigma)
+    ),
+    iter = 2000, warmup = 500, chains = 4, cores = 4,
+    seed = 5
+  )
+```
+
+```{r}
+summary(b5.4)
+```
+
+```{r}
+f <- fitted(b5.4) %>%
+  as_tibble() %>%
+  bind_cols(d)
+f
+```
+
+```{r}
+f %>% 
+  ggplot(aes(MedianAgeMarriage_s, Marriage_s)) +
+  geom_point(size = 2, shape = 1, color = "firebrick4") +
+  geom_segment(aes(xend = MedianAgeMarriage_s, yend = Estimate), size = 1/4) +
+  geom_line(aes(y = Estimate), color = "firebrick4") +
+  coord_cartesian(ylim = range(d$Marriage_s)) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+r <- residuals(b5.4) %>%
+  as_tibble() %>%
+  bind_cols(d)
+r
+
+text <- tibble(Estimate = c(-0.5, 0.5), Divorce = 14.1, label = c("slower", "faster"))
+
+r %>%
+  ggplot(aes(Estimate, Divorce)) +
+  stat_smooth(
+    method = "lm", fullrange = TRUE,
+    color = "firebrick4", fill = "firebrick4",
+    alpha = 1/5, size = 1/2
+  ) +
+  geom_vline(xintercept = 0, linetype = 2, color = "grey50") +
+  geom_point(size = 2, color = "firebrick4", alpha = 2/3) +
+  geom_text(data = text, aes(label = label)) +
+  coord_cartesian(xlim = range(r$Estimate), ylim = c(6, 14.1)) +
+  scale_x_continuous("Marriage rate residuals", limits = c(-2, 2)) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+b5.4b <- 
+  brm(data = d, family = gaussian,
+      MedianAgeMarriage_s ~ 1 + Marriage_s,
+      prior = c(prior(normal(0, 10), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(uniform(0, 10), class = sigma)),
+      iter = 2000, warmup = 500, chains = 4, cores = 4,
+      seed = 5)
+```
+
+```{r}
+text <-
+  tibble(Estimate = c(- 0.7, 0.5),
+         Divorce  = 14.1,
+         label    = c("younger", "older"))
+
+residuals(b5.4b) %>%
+  as_tibble() %>%
+  bind_cols(d) %>% 
+  
+  ggplot(aes(x = Estimate, y = Divorce)) +
+  stat_smooth(method = "lm", fullrange = T,
+              color = "firebrick4", fill = "firebrick4", 
+              alpha = 1/5, size = 1/2) +
+  geom_vline(xintercept = 0, linetype = 2, color = "grey50") +
+  geom_point(size = 2, color = "firebrick4", alpha = 2/3) +
+  geom_text(data = text,
+            aes(label = label)) +
+  scale_x_continuous("Age of marriage residuals", limits = c(-2, 3)) +
+  coord_cartesian(xlim = range(r$Estimate),
+                  ylim = c(6, 14.1)) +
+  theme_bw() +
+  theme(panel.grid = element_blank())  
+```
+
+```{r}
+nd <- tibble(
+  Marriage_s = seq(-3, 3, length.out = 30),
+  MedianAgeMarriage_s = mean(d$MedianAgeMarriage_s)
+)
+
+fitted(b5.3, newdata = nd) %>%
+  as_tibble() %>%
+  rename(f_ll = Q2.5, f_ul = Q97.5) %>%
+  bind_cols(
+    predict(b5.3, newdata = nd) %>%
+      as_tibble() %>%
+      transmute(p_ll = Q2.5, p_ul = Q97.5),
+    nd
+  ) %>%
+  ggplot(aes(Marriage_s, Estimate)) +
+  geom_ribbon(aes(ymin = p_ll, ymax = p_ul), fill = "firebrick", alpha = 1/5) +
+  geom_smooth(
+    aes(ymin = f_ll, ymax = f_ul), stat = "identity", 
+    fill = "firebrick", color = "firebrick4", alpha = 1/5, size = 1/4
+  ) + 
+  coord_cartesian(xlim = range(d$Marriage_s), ylim = c(6, 14)) +
+  labs(subtitle = "Counterfactual plot for which MedianAgeMarrage_s = 0", y = "Divorce") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+nd <- tibble(
+  MedianAgeMarriage_s = seq(-3, 3.5, length.out = 30),
+  Marriage_s = mean(d$Marriage_s)
+)
+
+fitted(b5.3, newdata = nd) %>%
+  as_tibble() %>%
+  rename(f_ll = Q2.5, f_ul = Q97.5) %>%
+  bind_cols(
+    predict(b5.3, newdata = nd) %>%
+      as_tibble() %>%
+      transmute(p_ll = Q2.5, p_ul = Q97.5),
+    nd
+  ) %>%
+  ggplot(aes(MedianAgeMarriage_s, Estimate)) +
+  geom_ribbon(aes(ymin = p_ll, ymax = p_ul), fill = "firebrick", alpha = 1/5) +
+  geom_smooth(
+    aes(ymin = f_ll, ymax = f_ul), stat = "identity",
+    fill = "firebrick", color = "firebrick4", alpha = 1/5, size = 1/4
+  ) +
+  coord_cartesian(xlim = range(d$MedianAgeMarriage_s), ylim = c(6, 14)) +
+  labs(subtitle = "Counterfactural plot for which Marriage_s = 0", y = "Divorce") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+fitted(b5.3) %>%
+  as_tibble()
+```
+
+```{r, fig.width = 3, fig.height = 3}
+fitted(b5.3) %>%
+  as_tibble() %>%
+  bind_cols(d) %>%
+  ggplot(aes(Divorce, Estimate)) +
+  geom_abline(linetype = 2, color = "grey50", size = .5) +
+  geom_point(size = 1.5, color = "firebrick4", alpha = 3/4) +
+  geom_linerange(aes(ymin = Q2.5, ymax = Q97.5), size = 1/4, color = "firebrick4") +
+  geom_linerange(aes(ymin = Estimate -Est.Error, ymax = Estimate + Est.Error),
+                 size = 1/2, color = "firebrick4") +
+  geom_text(data = . %>% filter(Loc %in% c("ID", "UT")),
+            aes(label = Loc), hjust = 0, nudge_x = -0.65) +
+  coord_cartesian(xlim = c(5, 13), ylim = c(5, 13))+
+  labs(x = "Observed divorce", y = "Predicted divorce") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+```{r, fig.width = 3, fig.height = 5}
+residuals(b5.3) %>%
+  as_tibble() %>%
+  rename(f_ll = Q2.5, f_ul = Q97.5) %>%
+  bind_cols(
+    predict(b5.3) %>%
+      as_tibble() %>%
+      transmute(p_ll = Q2.5, p_ul = Q97.5),
+    d
+  ) %>%
+  mutate(
+    p_ll = Divorce - p_ll,
+    p_ul = Divorce - p_ul
+  ) %>%
+  ggplot(aes(x = reorder(Loc, Estimate), y = Estimate)) +
+  geom_hline(yintercept = 0, size = 1/2, color = "firebrick4", alpha = 1/10) +
+  geom_pointrange(aes(ymin = f_ll, ymax = f_ul), size = 2/5, shape = 20, color = "firebrick4") +
+  geom_segment(aes(y = Estimate - Est.Error, yend = Estimate + Est.Error, 
+                   x = Loc, xend = Loc), size = 1, color = "firebrick4") +
+  geom_segment(aes(y = p_ll, yend = p_ul, x = Loc, xend = Loc), size = 3, color = "firebrick4", alpha = 1/10) +
+  coord_flip(ylim = c(-6, 5)) +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(hjust = 0)
+  )
+```
+
+```{r}
+residuals(b5.3) %>%
+  as_tibble() %>%
+  bind_cols(d) %>%
+  mutate(wpc = WaffleHouses / Population) %>%
+  ggplot(aes(wpc, Estimate)) +
+  geom_point(size = 1.5, color = "firebrick4", alpha = 1/2) +
+  stat_smooth(method = "lm", fullrange = TRUE, color = "firebrick4", size = 1/2,
+              fill = "firebrick", alpha = 1/5) +
+  geom_text_repel(data = . %>% filter(Loc %in% c("ME", "AR", "MS", "AL", "GA", "SC", "ID")),
+                  aes(label = Loc), seed = 5.6) +
+  coord_cartesian(xlim = range(0, 40)) +
+  #xlab("Waffles per capita") +
+  scale_x_continuous("Waffles per captia", limits = c(0, 45)) +
+  ylab("Divorce error") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+n <- 100
+set.seed(5)
+d <- tibble(
+  x_real = rnorm(n),
+  x_spur = rnorm(n, x_real),
+  y = rnorm(n, x_real)
+)
+pairs(d, col = "firebrick4")
+```
+
+```{r}
+brm(data = d, family = gaussian, 
+    y ~ 1 + x_real + x_spur,
+    prior = c(
+      prior(normal(0, 10), class = Intercept),
+      prior(normal(0, 1), class = b),
+      prior(uniform(0, 10), class = sigma)),
+    iter = 2000, warmup = 500, chains = 4, cores = 4,
+    seed = 5) %>%
+  fixef() %>%
+  round(digits = 2)
+```
+
+```{r}
+library(rethinking)
+data(milk)
+d <- milk
+rm(milk)
+detach(package:rethinking, unload = T)
+library(brms)
+```
+
+```{r}
+d %>% 
+  select(kcal.per.g, mass, neocortex.perc) %>% 
+  pairs(col = "firebrick4")
+```
+
+```{r}
+b5.5 <- 
+  brm(
+    kcal.per.g ~ 1 + neocortex.perc,
+    data = d, family = gaussian,
+    prior = c(
+      prior(normal(0, 100), class = Intercept),
+      prior(normal(0, 1), class = b),
+      prior(cauchy(0, 1), class = sigma)
+    ),
+    iter = 2000, warmup = 500, chains = 4, cores = 4,
+    seed = 5
+  )
+```
+
+
+```{r}
+print(b5.5, digits = 3)
+```
+
+```{r}
+fixef(b5.5)[2] * (76 - 55)
+```
+
+```{r}
+dcc <- 
+  d %>%
+  drop_na(ends_with("_s")) 
+```
+
+```{r}
+nd <- tibble(neocortex.perc = 54:80)
+
+nd %>%
+  bind_cols(
+    as_tibble(fitted(b5.5, newdata = nd, probs = c(.025, .975, .25, .75)))
+  ) %>%
+  ggplot(aes(neocortex.perc, Estimate)) +
+  geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5), fill = "firebrick", alpha = 1/5) +
+  geom_smooth(aes(ymin = Q25, ymax = Q75), stat = "identity", fill = "firebrick4", color = "firebrick4", alpha = 1/5, size = 1/2) +
+  geom_point(data = dcc, aes(y = kcal.per.g), size = 2, color = "firebrick4") +
+  coord_cartesian(xlim = range(dcc$neocortex.perc), ylim = range(dcc$kcal.per.g)) +
+  ylab("kcal.per.g") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+dcc <- dcc %>%
+  mutate(log_mass = log(mass))
+```
+
+```{r}
+b5.6 <-
+  brm(data = dcc, family = gaussian, 
+      kcal.per.g ~ 1 + log_mass,
+      prior = c(
+        prior(normal(0, 100), class = Intercept),
+        prior(normal(0, 1), class = b),
+        prior(uniform(0, 1), class = sigma)),
+      iter = 2000, warmup = 500, chains = 4, cores = 4,
+      control = list(adapt_delta = 0.9),
+      seed = 5)
+```
+
+```{r}
+nd <- tibble(log_mass = seq(-2.5, 5, length.out = 30))
+
+fitted(b5.6, newdata = nd, probs = c(.025, .975, .25, .75)) %>%
+  as_tibble() %>%
+  bind_cols(nd) %>%
+  ggplot(aes(log_mass, Estimate)) +
+  geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5), fill = "firebrick", alpha = 1/5) +
+  geom_smooth(aes(ymin = Q25, ymax = Q75), stat = "identity", 
+              fill = "firebrick4", color = "firebrick4", alpha = 1/5, size = 1/2) +
+  geom_point(data = dcc, aes(y = kcal.per.g), size = 2, color = "firebrick4") +
+  coord_cartesian(xlim = range(dcc$log_mass), ylim = range(dcc$kcal.per.g)) +
+  ylab("kcal.per.g") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+
+```{r}
+b5.7 <- brm(
+  data = dcc, family = gaussian,
+  kcal.per.g ~ 1 + neocortex.perc + log_mass,
+  prior = c(
+    prior(normal(0, 100), class = Intercept),
+    prior(normal(0, 1), class = b),
+    prior(uniform(0, 1), class = sigma)),
+  iter = 4000, warmup = 2000, chains = 4, cores = 4,
+  control = list(adapt_delta = 0.999), 
+  seed = 5
+)
+```
+
+```{r}
+print(b5.7, digits = 3)
+```
+
+```{r}
+nd <- tibble(
+  neocortex.perc = as.double(54:80),
+  log_mass = mean(dcc$log_mass)
+)
+
+fitted(b5.7, newdata = nd, probs = c(0.025, .975, .25, .75)) %>%
+  as_tibble() %>%
+  bind_cols(nd) %>%
+  ggplot(aes(neocortex.perc, y = Estimate)) +
+  geom_ribbon(aes(ymin = Q2.5, ymax = Q97.5), fill = "firebrick", alpha = 1/5) +
+  geom_smooth(aes(ymin = Q25, ymax = Q75), stat = "identity", fill = "firebrick4",
+              color = "firebrick4", alpha = 1/5, size = 1/2) +
+  geom_point(data = dcc, aes(y = kcal.per.g), size = 2, color = "firebrick4") +
+  coord_cartesian(xlim = range(dcc$neocortex.perc), ylim = range(dcc$kcal.per.g)) +
+  ylab("kcal.per.g") +
+  theme_bw() + 
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+n <- 100
+rho <- .7
+set.seed(5)
+d <- tibble(
+  x_pos = rnorm(n),
+  x_neg = rnorm(n, rho * x_pos, sqrt(1 - rho^2)),
+  y = rnorm(n, x_pos - x_neg)
+)
+pairs(d, col = "firebrick4")
+```
+
+```{r}
+b5.0.both <- brm(
+  data = d, family = gaussian,
+  y ~ 1 + x_pos + x_neg,
+  prior = c(
+    prior(normal(0, 100), class = Intercept),
+    prior(normal(0, 1), class = b),
+    prior(cauchy(0, 1), class = sigma)
+  ),
+  seed = 5
+)
+
+b5.0.pos <- update(b5.0.both, formula = y ~ 1 + x_pos)
+b5.0.neg <- update(b5.0.both, formula = y ~ 1 + x_neg)
+```
+
+```{r}
+fixef(b5.0.pos) %>% round(digits = 2)
+fixef(b5.0.neg) %>% round(digits = 2)
+fixef(b5.0.both) %>% round(digits = 2)
+```
+
+
+```{r}
+n <- 100
+set.seed(5)
+d <- tibble(
+  height = rnorm(n, mean = 10, sd = 2),
+  leg_prop = runif(n, min = 0.4, max = 0.5)
+) %>%
+  mutate(
+    leg_left = leg_prop * height + rnorm(n, mean = 0, sd = 0.02),
+    leg_right = leg_prop * height + rnorm(n, mean = 0, sd = 0.02)
+  )
+d
+```
+
+```{r}
+d %>%
+  select(leg_left:leg_right) %>%
+  cor() %>%
+  round(digits = 4)
+```
+
+```{r}
+d %>% 
+  ggplot(aes(leg_left, leg_right)) +
+  geom_point(alpha = 1/2, color = "firebrick4") +
+  theme_bw() + 
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+b5.8 <-
+  brm(data = d, family = gaussian,
+      height ~ 1 + leg_left + leg_right,
+      prior = c(prior(normal(10, 100), class = Intercept),
+                prior(normal(2, 10), class =b),
+                prior(uniform(0, 10), class = sigma)),
+      iter = 2000, warmup = 500, chains = 4, cores = 4,
+      seed = 5
+  )
+```
+
+```{r}
+print(b5.8)
+```
+
+
+```{r}
+stanplot(b5.8, type = "intervals", prob = .5, prob_outer = .95, point_est = "median") +
+  labs(title = "The coefficent plot for the tw-leg model",
+       subtitle = "Holy smkes; look at the widths of those betas!") +
+  theme_bw() +
+  theme(text = element_text(size = 14),
+        panel.grid = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_text(hjust=0))
+```
+
+```{r}
+pairs(b5.8, pars = parnames(b5.8)[2:3])
+```
+
+```{r}
+post <- posterior_samples(b5.8)
+post %>%
+  ggplot(aes(x = b_leg_left, y = b_leg_right)) +
+  geom_point(color = "firebrick", alpha = 1/10, size = 1/3) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+post %>%
+  select(b_leg_left:b_leg_right) %>%
+  cor()
+```
+
+```{r}
+post %>%
+  ggplot(aes(b_leg_left + b_leg_right, 0)) +
+  geom_halfeyeh(fill = "firebrick", point_interval = median_qi, .width = .95) +
+  scale_y_continuous(NULL, breaks = NULL) +
+  labs(title = "Sum the multicollinear coefficients",
+       subtitle = "Marked by the median and 95% PIs") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+
+```{r}
+b5.9 <-
+  brm(data = d, family = gaussian,
+      height ~ 1 + leg_left,
+      prior = c(prior(normal(10, 100), class = Intercept),
+                prior(normal(2, 10), class = b),
+                prior(uniform(0, 10), class = sigma)),
+      iter = 2000, warmup = 500, chains = 4, cores = 4,
+      seed = 5)
+```
+
+```{r}
+print(b5.9)
+```
+
+```{r}
+posterior_samples(b5.9) %>%
+  ggplot(aes(b_leg_left, 0)) + 
+  geom_halfeyeh(fill = "firebrick",
+                point_interval = median_qi, .widht = .95) +
+  scale_y_continuous(NULL, breaks = NULL) +
+  labs(title = "Just one coefficent need",
+       subtitle = "marked by the median and 95% PIs",
+       x = "only b_leg_left, this time") +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+
+```{r}
+library(rethinking)
+data(milk)
+d <- milk
+rm(milk)
+detach(package:rethinking, unload = TRUE)
+library(brms)
+```
+
+```{r}
+d
+```
+
+```{r}
+b5.10 <- 
+  brm(data = d, family = gaussian,
+      kcal.per.g ~ 1 + perc.fat,
+      prior = c(prior(normal(.6, 10), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(uniform(0, 10), class = sigma)),
+      iter = 2000, warmup = 500, chains = 4, cores = 4,
+      seed = 5)
+
+# `kcal.per.g` regressed on `perc.lactose`
+b5.11 <- 
+  update(b5.10,
+         newdata = d,
+         formula = kcal.per.g ~ 1 + perc.lactose)
+```
+
+```{r}
+posterior_summary(b5.10) %>% round(digits = 3)
+posterior_summary(b5.11) %>% round(digits = 3)
+```
+
+```{r}
+posterior_interval(b5.10)[2, ] %>% round(digits = 3)
+posterior_interval(b5.11)[2, ] %>% round(digits = 3)
+```
+
+```{r}
+b5.12 <- 
+  update(b5.11,
+         newdata = d,
+         formula = kcal.per.g ~ 1 + perc.fat + perc.lactose)
+```
+
+```{r}
+posterior_summary(b5.12) %>% round(digits = 3)
+```
+
+```{r}
+library(GGally)
+ggpairs(data = d, columns = c(3:4, 6)) + 
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+d
+```
+
+```{r}
+
+
+sim_coll <- function(seed, rho){
+  set.seed(seed)
+  d <-
+    d %>% 
+    mutate(x = rnorm(n(), 
+                     mean = perc.fat * rho,
+                     sd   = sqrt((1 - rho^2) * var(perc.fat))))
+    
+  m <- lm(kcal.per.g ~ perc.fat + x, data = d)
+  
+  sqrt(diag(vcov(m)))[2]  # parameter SD
+}
+
+# how many simulations per `rho`-value would you like?
+n_seed <- 100
+# how many `rho`-values from 0 to .99 would you like to evaluate the process over?
+n_rho  <- 30
+
+d <-
+  tibble(seed = 1:n_seed) %>% 
+  expand(seed, rho = seq(from = 0, to = .99, length.out = n_rho)) %>% 
+  mutate(parameter_sd = purrr::map2_dbl(seed, rho, sim_coll)) %>% 
+  group_by(rho) %>% 
+  # we'll `summarise()` our output by the mean and 95% intervals
+  summarise(mean = mean(parameter_sd),
+            ll   = quantile(parameter_sd, prob = .025),
+            ul   = quantile(parameter_sd, prob = .975))
+```
+
+```{r}
+d
+```
+
+```{r}
+d %>% 
+  ggplot(aes(x = rho, y = mean)) +
+  geom_smooth(aes(ymin = ll, ymax = ul),
+              stat = "identity",
+              fill = "firebrick", color = "firebrick4", alpha = 1/5, size = 1/2) +
+  labs(x = expression(rho),
+       y = "parameter SD") +
+  coord_cartesian(ylim = c(0, .0072)) +
+  theme_bw() +
+  theme(panel.grid = element_blank())
+```
+
+
+```{r}
+library(rethinking)
+data(Howell1)
+d <- Howell1
+rm(Howell1)
+detach(package:rethinking, unload = T)
+library(brms)
+```
+
+```{r}
+glimpse(d)
+```
+
+```{r}
+b5.15 <-
+  brm(
+    data = d, family = gaussian,
+    height ~ 1 + male,
+    prior = c(prior(normal(178, 100), class = Intercept),
+              prior(normal(0, 10), class = b),
+              prior(cauchy(0, 2), class = sigma)),
+    iter = 2000, warmup = 500, chains = 4, cores = 4,
+    seed = 5
+  )
+```
+
+```{r}
+print(b5.15)
+```
+
+```{r}
+nd <- tibble(male = 1)
+fitted(b5.15, newdata = nd, summary = FALSE) %>%
+  as_tibble() %>%
+  ggplot(aes(V1, 0)) +
+  geom_halfeyeh(fill = "firebrick4", point_interval = median_qi, .width = .95) +
+  scale_y_continuous(NULL, breaks = NULL) +
+  labs(subtitle = "Model-implied male heights",
+       x = expression(alpha + beta["male"]))
+```
+
+```{r}
+nd <- tibble(male = 1)
+fitted(b5.15, newdata = nd, summary = FALSE) %>% 
+  as_tibble() %>%
+```
+
+```{r}
+d <- d %>%
+  mutate(female = 1 - male)
+```
+
+```{r}
+b5.15b <-
+  brm(data = d, family = gaussian,
+      height ~ 0 + male + female,
+      prior = c(prior(normal(178, 100), class = b),
+                prior(cauchy(0, 2), class = sigma)),
+      iter = 2000, warmup = 500, chains = 4, cores = 4,
+      seed = 5
+  )
+```
+
+```{r}
+print(b5.15b)
+```
+
+```{r}
+posterior_samples(b5.15b) %>%
+  transmute(dif = b_male - b_female) %>%
+  ggplot(aes(x = dif, y = 0)) +
+  geom_halfeyeh(fill = "firebrick4", point_interval = median_qi, .width = .95) +
+  scale_y_continuous(NULL, breaks = NULL) +
+  labs(subtitle = "Model-implied difference score",
+       x = expression(alpha["male"] - alpha["female"])) +
+  theme_bw() + 
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+library(rethinking)
+data(milk)
+d <- milk
+rm(milk)
+detach(package:rethinking, unload = T)
+library(brms)
+```
+
+```{r}
+d %>% 
+  distinct(clade)
+```
+
+```{r}
+d <- 
+  d %>%
+  mutate(clade_nwm = ifelse(clade == "New World Monkey", 1, 0),
+         clade_owm = ifelse(clade == "Old World Monkey", 1, 0),
+         clade_s   = ifelse(clade == "Strepsirrhine", 1, 0),
+         clade_ape = ifelse(clade == "Ape", 1, 0))
+```
+
+```{r}
+b5.16 <- 
+  brm(data = d, family = gaussian,
+      kcal.per.g ~ 1 + clade_nwm + clade_owm + clade_s,
+      prior = c(prior(normal(.6, 10), class = Intercept),
+                prior(normal(0, 1), class = b),
+                prior(uniform(0, 10), class = sigma)),
+      iter = 2000, warmup = 500, chains = 4, cores = 4,
+      seed = 5)
+```
+
+```{r}
+print(b5.16)
+```
+
+```{r}
+post <- posterior_samples(b5.16)
+post
+```
+
+```{r}
+post %>%
+  transmute(mu_ape = b_Intercept,
+            mu_nwm =b_Intercept + b_clade_nwm,
+            mu_owm = b_Intercept + b_clade_owm,
+            mu_s = b_Intercept + b_clade_s) %>%
+  gather() %>%
+  group_by(key) %>%
+  mean_hdi() %>%
+  mutate_if(is.double, round, digits = 2)
+```
+
+```{r}
+d
+```
+
+```{r}
+nd <- tibble(clade_nwm = c(1, 0, 0, 0),
+             clade_owm = c(0, 1, 0, 0),
+             clade_s =   c(0, 0, 1, 0),
+             primate = c("New World Monkey", "Old World Monkey", "Strepsirrhine", "Ape"))
+nd
+```
+
+```{r}
+fitted(b5.16, newdata = nd, summary = F) %>%
+  as_tibble() %>%
+  set_names(c("New World Monkey", "Old World Monkey", "Strepsirrhine", "Ape")) %>%
+  gather() %>%
+  ggplot(aes(value, reorder(key, value))) +
+  geom_halfeyeh(fill = "firebrick4", point_interval = median_qi, .widht = .95) +
+  labs(x = "kcal.per.g",
+       y = NULL) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_text(hjust = 0))
+```
+
+```{r}
+post
+```
+
+```{r}
+nd <- tibble(clade_nwm = c(1, 0, 0, 0),
+             clade_owm = c(0, 1, 0, 0),
+             clade_s   = c(0, 0, 1, 0),
+             primate   = c("New World Monkey", "Old World Monkey", "Strepsirrhine", "Ape"))
+
+fitted(b5.16, newdata = nd, summary = F) %>% as_tibble()
+```
+
+```{r}
+b5.16_alt <-
+  brm(
+    data = d, family = gaussian,
+    kcal.per.g ~ 0 + clade,
+    prior = c(prior(normal(.6, 10), class = b),
+              prior(uniform(0, 10), class = sigma)),
+    iter = 2000, warmup = 500, chains = 4, cores = 4,
+    seed = 5)
+```
+
+

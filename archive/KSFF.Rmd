@@ -1,0 +1,215 @@
+한국 경수로 감시시험 자료의 Fluence Factor 분석
+========================================================
+
+1. Dataframe 설정
+--------------------
+
+### 전체 TTS DB를 읽기 및 outlier 포인트 제외
+```{r}
+source("tts_model.R")
+require(nlme)
+require(gdata)
+TTSDBALL <- read.xls("DB/TTSDatabase8-04R1_KORSUV_20150406.xlsx", 
+                     header=TRUE, 
+                     na.strings=c("", " ", "-999", "-999.000000000000000"))
+
+# Data not used in 1-06 calibration or validation (E. D. Eason)
+# irradiated in both BWR & PWR at diffrent flux
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "PMON01" & Hrs_used == 78366))
+
+# unusally high flux(highest inthe Database), well above expected application range
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "PBR_01" & Hrs_used == 18290)) 
+
+# irradiated in 2 PWRs at different Tc
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "WTP301" & Hrs_used == 121107))
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "WZN101" & Hrs_used == 125829))
+
+# Chauvenet outliers in previous fitting efforts
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "WCK101" & Hrs_used == 80556))
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "WSQ201" & Hrs_used == 25528))
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "WCK101" & Hrs_used == 11111))
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "WTM201" & Hrs_used == 46608))
+
+# Chauvenet outliers in 1-06 fitting efforts
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "FGIN02" & Hrs_used == 60278))
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "WCL101" & Hrs_used == 9222))
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "WFA201" & Hrs_used == 56389))
+TTSDBALL <- subset(TTSDBALL, !(HEAT_ID == "WFA201" & Hrs_used == 116062))
+```
+
+### 한국 경수로 감시시험 자료만을 선택
+```{r}
+KS <- subset(TTSDBALL, 
+             Dataset=="KORSUV", 
+             select=c("MAT_ID", "PLANT_ID", "PROD_ID", "SPEC_ORI", "CU", "NI", "P", 
+                      "CAP_F1", "DTT30"))
+colnames(KS) <- c("material", "plant", "form", "orientation", "Cu", "Ni", "P", "fl", "dTm")
+KS$fl <- KS$fl / 1e19  # 수치안정성을 위해서 단위 변환 (1e19 n/cm2)
+
+# 불필요한 factor 삭제 및 factor 이름 변경
+KS$material <- factor(KS$material)
+KS$plant <- factor(KS$plant)
+levels(KS$plant) <- c("K1", "K2", "K3", "K4", 
+                      "U1", "U2", "U3", "U4", "U5", "U6",
+                      "Y1", "Y2", "Y3", "Y4", "Y5", "Y6")
+KS$form <- factor(KS$form)
+KS$orientation <- factor(KS$orientation)
+levels(KS$orientation) <- c("L", "T")
+KS$id <- factor(do.call(paste0, KS[, 2:4])) # id = plant + form + orientation
+
+# outlier 자료정리
+kslc <- subset(KS, Cu < 0.072)   # Low Cu 감시자료, 고리1호기 Weld 제외
+kslc <- subset(kslc, dTm > 0)  # TTS가 음수인 자료를 제외
+
+# nlsList 및 nlme용 자료정리
+nid <- as.data.frame(table(kslc$id))  # id별 데이터포인트 수
+nid <- subset(nid, Freq >= 3, )  # 3개 이상의 포인트를 가지는 id 선택
+kslc3 <- subset(kslc, id %in% nid$Var)  # 3 point 이상 plant만 선정
+kslc3 <- subset(kslc3, id != "K1FL")  # nlsList에서 매우 큰 se를 발생시키기 때문에 제거
+
+# 아래와 같이 sorting을 해줘야 augPred에서 문제를 발생시키지 않음(이유는 잘모름)
+kslc3$id <- as.character(kslc3$id)
+kslc3 <- kslc3[order(kslc3$id), ]
+kslc3$id <- factor(kslc3$id)
+
+# GrouptedData로 변환(nlsList, nlme 용)
+kslc3 <- groupedData(dTm ~ fl | id, data=kslc3)
+
+# kslc3 data 출력
+str(kslc3)
+plot(kslc3)
+```
+
+
+2. 회귀함수 및 신뢰구간함수 정의
+--------------------------------------
+```{r}
+# y ~ CF * x ^ 0.5
+PowerModel0 <- deriv3(~ CF * predictor ^ 0.5, c("CF"), function(predictor, CF) {})
+PowerModel0Init <- function(mCall, LHS, data) {
+  xy <- sortedXyData(mCall[["predictor"]], LHS, data)
+  lm.fit <- lm(log(xy[, "y"]) ~ log(xy[, "x"]))
+  coefs <- coef(lm.fit)
+  cf <- exp(coefs[1])
+  value <- c(cf)
+  names(value) <- mCall["CF"]
+  value
+}
+SSpow0 <- selfStart(PowerModel0, PowerModel0Init, c("CF"))
+
+# y ~ CF * x ^ PO
+PowerModel1 <- deriv3(~CF * predictor ^ PO, c("CF", "PO"), function(predictor, CF, PO) {})
+PowerModel1Init <- function(mCall, LHS, data) {
+  xy <- sortedXyData(mCall[["predictor"]], LHS, data)
+  lm.fit <- lm(log(xy[, "y"]) ~ log(xy[, "x"]))
+  coefs <- coef(lm.fit)
+  cf <- exp(coefs[1])
+  po <- coefs[2]
+  value <- c(cf, po)
+  names(value) <- mCall[c("CF", "PO")]
+  value
+}
+SSpow1 <- selfStart(PowerModel1, PowerModel1Init, c("CF", "PO"))
+```
+
+3. 분석결과
+------------------------------------------
+### Low Cu 재료의 선형회귀 적용(K1WT 제외)
+```{r}
+ldTm <- log(kslc$dTm)
+lfl <- log(kslc$fl)
+kslc.lm <- lm(ldTm ~ lfl, data=kslc)
+#xfl <- with(kslc, seq(min(fl), max(fl), length.out=100))
+plot(ldTm ~ lfl)
+abline(kslc.lm, col="red")
+par(mfrow=c(2, 2))
+plot(kslc.lm)
+par(mfrow=c(1, 1))
+```
+선형 회귀에서 문제가 되는 점은...  
+
+
+### 궁시렁 궁시렁....
+```{r}
+plot(dTm ~ fl, data=kslc)
+coefs <- coef(kslc.lm)
+cf <- exp(coefs[1])
+po <- coefs[2]
+points(kslc$fl, SSpow1(kslc$fl, cf, po), col="red")
+matlines(xfl, yvals, type="l", col=c(1,2,2), lty=c(1,2,2))
+```
+
+
+
+
+### Low Cu 재료의 비선형회귀 적용
+```{r}
+kslc.m1 <- nls(dTm ~ SSpow1(fl, CF, PO), data=kslc)
+xfl <- with(kslc, seq(min(fl), max(fl), length.out=100))
+ydTp <- do.call(PowerModel1, args=c(list(predictor=xfl), as.list(coef(kslc.m1))))
+kslc.grad <- attr(ydTp, "gradient") # gradiente avaliado no novo t
+kslc.chvc <- chol(vcov(kslc.m1))
+kslc.se <- sqrt(apply(kslc.grad %*% t(kslc.chvc), 1, function(x) sum(x^2))) # erro padrão
+yvals <- c(ydTp)+ outer(kslc.se, qt(c(.5, .025,.975), df=df.residual(kslc.m1)))
+plot(dTm~fl, data=kslc)
+matlines(xfl, yvals, type="l", col=c(1,2,2), lty=c(1,2,2))
+```
+
+### Low Cu 재료의 SSpow0 비선형회귀 적용(K1WT 제외)
+```{r}
+kslc.m0 <- nls(dTm ~ SSpow0(fl, CF), data=kslc)
+xfl <- with(kslc, seq(min(fl), max(fl), length.out=100))
+ydTp <- do.call(PowerModel0, args=c(list(predictor=xfl), coef(kslc.m0)[1]))
+kslc.grad <- attr(ydTp, "gradient") # gradiente avaliado no novo t
+kslc.chvc <- chol(vcov(kslc.m0))
+kslc.se <- sqrt(apply(kslc.grad %*% t(kslc.chvc), 1, function(x) sum(x^2))) # erro padrão
+yvals <- c(ydTp)+ outer(kslc.se, qt(c(.5, .025,.975), df=df.residual(kslc.m0)))
+plot(dTm~fl, data=kslc)
+matlines(xfl, yvals, type="l", col=c(1,2,2), lty=c(1,2,2))
+```
+
+
+
+### 3 point이상의 Low Cu 재료 비선형회귀
+```{r}
+kslc3 <- subset(kslc3, id!="K1FL")
+kslc3.m1 <- nls(dTm ~ SSpow1(fl, CF, PO), data=kslc3)
+xfl <- with(kslc3, seq(min(fl), max(fl), length.out=100))
+ydTp <- do.call(PowerModel1, args=c(list(predictor=xfl), as.list(coef(kslc3.m1))))
+kslc3.grad <- attr(ydTp, "gradient") # gradiente avaliado no novo t
+kslc3.chvc <- chol(vcov(kslc3.m1))
+kslc3.se <- sqrt(apply(kslc3.grad %*% t(kslc3.chvc), 1, function(x) sum(x^2))) # erro padrão
+yvals <- c(ydTp)+ outer(kslc3.se, qt(c(.5, .025,.975), df=df.residual(kslc3.m1)))
+plot(dTm~fl, data=kslc3)
+matlines(xfl, yvals, type="l", col=c(1,2,2), lty=c(1,2,2))
+```
+
+```{r}
+kslc3.lis <- nlsList(dTm ~ SSpow1(fl, CF, PO)|id, data=kslc3) 
+plot(intervals(kslc3.lis))
+plot(augPred(kslc3.lis))
+```
+
+
+
+
+
+```{r}
+## Dummies
+
+#ksp <- ks[ks$form!="W",]
+#rs <- groupedData(dTm ~ fluence|plant/form/orientation, ks)
+#plot(rs)
+#ks$dTp <- with(ks, CR6551(form, Cu, Ni, P, Tc, fluence, ti))  # predicted TTS
+#ks$res <- with(ks, dTm - dTp)  # residual
+
+# Low Cu DB
+#lc <- subset(TTSDBALL, CU <= 0.072 & Dataset != "KORSUV", select=c("Dataset", "PLANT_ID", "PROD_ID", "SPEC_ORI","CU", "NI", "P", "Tc", "CAP_F1", "Hrs_used", "DTT30"))
+#colnames(lc) <- c("dataset", "plant", "form", "orientation", "Cu", "Ni", "P", "Tc", "fluence", "ti", "dTm")
+#lc$fl <- lc$fluence / 1e19
+#lc$plant <- factor(lc$plant)
+#lc$form <- factor(lc$form)
+#lcp <- lc[lc$form != "W",]
+#rs <- groupedData(dTm ~ fluence | type, lc)
+#plot(rs)
+```

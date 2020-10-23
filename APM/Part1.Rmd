@@ -1,0 +1,32 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+str(iris)
+```
+
+```{r}
+library(AppliedPredictiveModeling)
+library(caret)
+
+transparentTheme(trans = .4)
+featurePlot(
+  x = iris[, 1:4],
+  y = iris$Species,
+  plot = "pairs",
+  auto.key = list(columns = 3)
+)
+```
+
+```{r}
+transparentTheme(trans = .4)
+featurePlot(
+  x = iris[, 1:4],
+  y = iris$Species,
+  plot = "ellipse",
+  auto.key = list(columns = 3)
+)
+```
+

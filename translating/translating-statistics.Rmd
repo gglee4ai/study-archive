@@ -1,0 +1,331 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Chapter 5 Measuring Uncertainty
+
+## Example 5.1
+
+```{r}
+data7 <- c(
+  26.33, 27.31, 27.38, 26.63, 26.87, 26.67, 28.36, 28.52,
+  26.91, 28.90, 27.99, 27.17, 28.32, 26.93, 26.93, 26.65,
+  27.73, 26.93
+)
+```
+
+```{r}
+x <- mean(data7)
+s <- sd(data7)
+n <- length(data7)
+c <- 0.90
+x
+s
+n
+c
+```
+
+```{r}
+se <- s / sqrt(n)
+t2 <- qt(c + (1 - c) / 2, df = n - 1)
+error2 <- se * t2
+se
+t2
+error2
+```
+
+```{r}
+t1 <- qt(c, df = n - 1)
+error1 <- se * t1
+error1
+```
+
+```{r}
+lower.2s.CI <- x - error2
+upper.2s.CI <- x + error2
+lower.1s.CI <- x - error1
+lower.2s.CI
+upper.2s.CI
+lower.1s.CI
+```
+
+```{r}
+library(Rmisc)
+CI(data7, ci = 0.90)
+```
+
+```{r}
+CI(data7, ci = 0.80)
+```
+
+```{r}
+hist(data7)
+```
+
+```{r}
+shapiro.test(data7)
+```
+
+```{r}
+shapiro.test(rnorm(100, mean = 5, sd = 3))
+```
+
+```{r}
+shapiro.test(runif(100, min = 2, max = 4))
+```
+
+
+## Example 5.2
+
+```{r}
+CI(data7, ci = 0.70)
+```
+
+```{r}
+data8 <- c(data7, 26.01, 28.33, 26.62, 26.99, 27.48, 27.74, 27.89)
+```
+
+
+```{r}
+CI(data8, ci = 0.90)
+```
+
+
+## Example 5.3
+
+```{r}
+data9 <- c(
+  9.2, 7.4, 10.7, 3.6, 4.3, 3.2, 14.2, 30.1, 15.7, 6.8, 8.9,
+  9.1, 8.2, 7.5, 7.4, 14.9, 19.7, 26.3, 6.4, 14.2, 8.3, 6.9,
+  8.5, 11.5, 22.7, 16.9, 31.4, 10.7, 17.9, 10.0
+)
+hist(data9)
+```
+
+```{r}
+data10 <- log10(data9)
+data10
+hist(data10)
+```
+
+```{r}
+qqnorm(data10)
+qqline(data10)
+```
+
+```{r}
+ci <- CI(data10, ci = 0.95)
+ci
+```
+
+```{r}
+10^ci
+```
+
+```{r}
+CI(data9, ci = 0.95)
+```
+
+
+## Example 5.4
+
+```{r}
+x <- 20
+n <- 25
+alpha <- 0.1
+x / n
+```
+
+```{r}
+df1l <- 2 * (n - x + 1)
+df2l <- 2 * x
+df1u <- df2l + 2
+df2u <- df1l - 2
+df1l
+df2l
+df1u
+df2u
+```
+
+```{r}
+lci <- ifelse(x > 0, x / (x + qf(1 - alpha / 2, df1l, df2l) *
+  (n - x + 1)), 0)
+uci <- ifelse(x < n, ((x + 1) * qf(1 - alpha / 2, df1u, df2u)) /
+  (n - x + (x + 1) * qf(1 - alpha / 2, df1u, df2u)), 1)
+lci
+uci
+```
+
+```{r}
+uci1 <- ifelse(x < n, ((x + 1) * qf(1 - alpha, df1u, df2u)) /
+  (n - x + (x + 1) * qf(1 - alpha, df1u, df2u)), 1)
+uci1
+```
+
+
+```{r}
+library(Hmisc)
+```
+
+```{r}
+binconf(x = 20, n = 25, alpha = 0.1, method = "exact")
+```
+
+
+```{r}
+binconf(x = 20, n = 25, alpha = 0.2, method = "exact")
+```
+
+
+
+## Example 5.5
+
+```{r}
+binconf(x = 20, n = 25, alpha = 0.3, method = "exact")
+```
+
+
+```{r}
+binconf(x = 4, n = 5, alpha = 0.1, method = "exact")
+```
+
+
+
+## Example 5.6
+
+```{r}
+x <- mean(data7)
+s <- sd(data7)
+n <- length(data7)
+P <- 0.75
+conf <- 0.9
+x
+s
+n
+P
+conf
+```
+
+```{r}
+n2 <- (n - 1) * (1 + 1 / n)
+ncrit <- (qnorm((1 - P) / 2))^2
+ccrit <- qchisq(1 - conf, n - 1)
+# Calculate the two-sided k
+k2 <- sqrt((n2 * ncrit) / ccrit)
+k2
+# Calculate the two-sided tolerance interval
+lower.2s.TI <- x - k2 * s
+upper.2s.TI <- x + k2 * s
+lower.2s.TI
+upper.2s.TI
+
+# Calculate the values needed for the one-sided tolerance interval
+ncritcov <- qnorm(P)
+ncp <- sqrt(n) * ncritcov
+tcrit <- qt(conf, df = n - 1, ncp = ncp)
+# Calculate the one-sided k
+k1 <- tcrit / sqrt(n)
+k1
+# Calculate the one-sided lower tolerance bound
+lower.1s.TI <- x - k1 * s
+lower.1s.TI
+```
+
+
+```{r}
+library(tolerance)
+normtol.int(data7, alpha = 0.1, P = 0.75, side = 2, method = "HE")
+normtol.int(data7, alpha = 0.1, P = 0.75, side = 2, method = "WBE")
+normtol.int(data7, alpha = 0.1, P = 0.75, side = 2, method = "ELL")
+normtol.int(data7, alpha = 0.1, P = 0.75, side = 2, method = "KM")
+normtol.int(data7, alpha = 0.1, P = 0.75, side = 2, method = "EXACT")
+normtol.int(data7, alpha = 0.1, P = 0.75, side = 2, method = "OCT")
+normtol.int(data7, alpha = 0.1, P = 0.75, side = 2, method = "HE2")
+```
+
+```{r}
+normtol.int(data7, alpha = 0.1, P = 0.75, side = 1)
+```
+
+
+```{r}
+normtol.int(data7, alpha = 0.3, P = 0.75, side = 2, method = "HE2")
+```
+
+
+```{r}
+normtol.int(data7, alpha = 0.1, P = 0.95, side = 2, method = "HE2")
+```
+
+
+## Ex 5.8
+
+```{r}
+# Assign the successes, trials, coverage level, and significance level
+x <- 20
+n <- 25
+P <- 0.75
+alpha <- 0.10
+# Assign the significance level and the coverage level for the # two-sided interval
+alpha <- alpha / 2
+P <- (P + 1) / 2
+# Calculate the two-sided tolerance interval using the exact method
+lower.p <- (1 + ((n - x + 1) * qf(1 - alpha,
+  df1 = 2 * (n - x + 1),
+  df2 = (2 * x)
+)) / x)^(-1)
+upper.p <- (1 + (n - x) / ((x + 1) * qf(1 - alpha,
+  df1 = 2 * (x + 1),
+  df2 = 2 * (n - x)
+)))^(-1)
+lower.p <- max(0, lower.p)
+upper.p <- min(upper.p, 1)
+lower <- qbinom(1 - P, size = n, prob = lower.p)
+upper <- qbinom(P, size = n, prob = upper.p)
+lower
+upper
+# Reassign the successes, trials, coverage level and significance level
+x <- 20
+n <- 25
+P <- 0.75
+alpha <- 0.10
+# Calculate the one-sided lower bound using the exact method
+# Note same equation as previous with alpha left at 0.10
+# Same would apply to an upper bound
+lower.p <- (1 + ((n - x + 1) * qf(1 - alpha,
+  df1 = 2 * (n - x + 1),
+  df2 = (2 * x)
+)) / x)^(-1)
+lower.p <- max(0, lower.p)
+lower <- qbinom(1 - P, size = n, prob = lower.p)
+lower
+```
+
+```{r}
+bintol.int(
+  x = 20, n = 25, P = 0.75, alpha = 0.1, side = 2,
+  method = "CP"
+)
+```
+
+```{r}
+bintol.int(
+  x = 20, n = 25, P = 0.75, alpha = 0.1, side = 1,
+  method = "CP"
+)
+```
+
+```{r}
+bintol.int(
+  x = 20, n = 25, P = 0.75, alpha = 0.3, side = 2,
+  method = "CP"
+)
+```
+
+```{r}
+bintol.int(
+  x = 20, n = 25, P = 0.95, alpha = 0.1, side = 2,
+  method = "CP"
+)
+```

@@ -1,0 +1,396 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+```
+
+```{r}
+rpt2 <- read_csv("input/my2level_repeat.csv")
+rpt2
+```
+
+```{r}
+rpt2 <-
+  rpt2 %>%
+  mutate(female.cc = ifelse(female == 0, -1, 1))
+rpt2
+table(rpt2$female.cc, rpt2$female)
+```
+
+```{r}
+rpt2long <-
+  rpt2 %>%
+  gather(key = time, value = y, -pid, -female, -female.cc) %>%
+  mutate(time = as.numeric(str_remove(time, "y")))
+rpt2long
+```
+
+```{r}
+rpt2long <-
+  rpt2long %>%
+  group_by(pid) %>%
+  mutate(time_gm = time - mean(time))
+```
+
+```{r}
+#time.change <-
+  rpt2long %>%
+  group_by(female, time) %>%
+  summarise(ym = mean(y)) %>%
+  ggplot(
+    aes(
+      x = time, 
+      y = ym, 
+      group = female,
+      shape = as.factor(female)
+    )
+  ) +
+  geom_point(size = 4) +
+  geom_line() +
+  labs(x = "Time", y = "y", shape = "Gender") +
+  scale_shape_manual(values = 0:1, labels = c("M", "F")) +
+  scale_y_continuous(limits = c(2, 4))
+```
+
+```{r}
+set.seed(111)
+rpt2long %>%
+  group_by(pid) %>%
+  nest() %>%
+  slice(sample(1:n(), 20)) %>%
+  unnest(data) %>%
+  ggplot(aes(x = time, y = y)) +
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, formula = y ~ poly(x, 2, raw = TRUE)) +
+  facet_wrap(~ pid)
+```
+
+```{r}
+rpt2long %>%
+  ungroup() %>%
+  summarise(
+    length(y), 
+    mean(y),
+    sd(y),
+    min(y),
+    max(y)
+  )
+```
+
+```{r}
+rpt2long %>%
+  ungroup() %>%
+  summarise(
+    length(time), 
+    mean(time),
+    sd(time),
+    min(time),
+    max(time)
+  )
+```
+
+
+
+```{r}
+rpt2long %>% 
+  group_by(pid) %>%
+  #arrange(pid) %>%
+  summarise_all(mean) %>%
+  summarise(
+    length(y),
+    mean(y),
+    sd(y),
+    min(y),
+    max(y)
+  )
+```
+
+
+```{r}
+rpt2.model0 <- lme4::lmer(y ~ 1 + (1 | pid), data = rpt2long)
+summary(rpt2.model0)
+```
+
+```{r}
+rpt2.model0 <- lmer(y ~ 1 + (1 | pid), data = rpt2long)
+summary(rpt2.model0)
+```
+
+```{r}
+.04476 / (.04476 + .50194)
+```
+
+```{r}
+rpt2long <-
+  rpt2long %>%
+  ungroup()
+rpt2.model1a <- lmer(y ~ time_gm + (time_gm | pid), data = rpt2long)
+summary(rpt2.model1a)
+```
+
+```{r}
+VarCorr(rpt2.model1a)
+```
+
+```{r}
+rpt2long <-
+  rpt2long %>%
+  mutate(time_gm2 = time_gm^2)
+rpt2long
+```
+
+```{r}
+rpt2.model1b <- lmer(
+  y ~ 1 + time_gm + time_gm2 + (1 + time_gm + time_gm2 | pid),
+  data = rpt2long
+)
+summary(rpt2.model1b)
+```
+
+```{r}
+round(summary(rpt2.model1b)$coefficient, 3)
+```
+
+```{r}
+AIC(rpt2.model0, rpt2.model1a, rpt2.model1b)
+```
+```{r}
+BIC(rpt2.model0, rpt2.model1a, rpt2.model1b)
+```
+
+```{r}
+rpt2.model1c <- lmer(
+  y ~ 1 + time_gm + time_gm2 + (1 + time_gm | pid),
+  data = rpt2long
+)
+summary(rpt2.model1c)
+```
+
+```{r}
+AIC(rpt2.model1b, rpt2.model1c)
+BIC(rpt2.model1b, rpt2.model1c)
+```
+
+
+```{r}
+rpt2.model2a <- lmer(
+  y ~ 1 + female.cc + (time_gm + time_gm2) + female.cc:(time_gm + time_gm2) +
+     (1 + time_gm | pid),
+  data = rpt2long
+)
+print(summary(rpt2.model2a))
+```
+
+```{r}
+AIC(rpt2.model2a, rpt2.model1c)
+```
+
+```{r}
+library(modelr)
+rpt2long <-
+  rpt2long %>%
+  add_predictions(rpt2.model2a)
+```
+
+```{r}
+rpt2long %>%
+  group_by(time_gm, female.cc) %>%
+  summarise_all(mean) %>%
+  ggplot(aes(x = time, y = pred, shape = as.factor(female))) +
+  geom_point(size = 3) +
+  geom_line(stat = "identity") +
+  scale_shape_manual(values = 0:1, labels = c("M", "F")) +
+  theme(legend.position = "top")
+```
+
+```{r}
+rpt2long %>%
+  #group_by(pid, female.cc) %>%
+  ggplot(aes(x = time, y = pred, color = factor(female))) +
+  geom_point(size = 1, alpha = 0.1) +
+  geom_line(aes(group = pid), alpha = 0.1) +
+  scale_color_manual(
+    values = c("0" = "blue", "1" = "red"), 
+    labels = c("M", "F")
+  ) +
+  geom_line(
+    data = rpt2long %>% group_by(time_gm, female.cc) %>% summarise_all(mean),
+    aes(x = time, y = pred, shape = as.factor(female)),
+    size = 2
+  ) + 
+  facet_wrap(~ female)
+```
+
+```{r}
+library(lme4)
+library(lmerTest)
+library(tidyverse)
+```
+
+
+```{r}
+clus2 <- read_csv("input/my2level_cluster.csv")
+```
+
+```{r}
+clus2 %>%
+  summary()
+```
+
+```{r}
+by_gid <-
+  clus2 %>%
+  group_by(gid) %>%
+  nest() 
+by_gid
+by_gid$data[[1]]
+```
+
+```{r}
+clus22 <-
+  by_gid %>%
+  mutate(
+    gx1_m = map_dbl(data, function(df) { mean(df$gx1) }),
+    gx1_am = gx1_m - mean(gx1_m)
+  ) %>%
+  unnest() %>%
+  #group_by(gid) %>%
+  mutate(
+    ix1_gm = ix1 - mean(ix1),
+    ix2_gm = ix2 - mean(ix2)
+  ) %>%
+  ungroup()
+by_gid
+```
+
+```{r, fig.asp=1}
+clus22 %>%
+  ggplot(aes(x = ix1, y = y)) +
+  geom_point(size = 1.5, alpha = 0.2, color = "red") + 
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~gid)
+
+clus22 %>%
+  ggplot(aes(x = ix2, y = y)) +
+  geom_point(size = 1.5, alpha = 0.2, color = "blue") + 
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~gid)
+```
+
+```{r}
+clus22a <-
+  clus22 %>%
+  group_by(gid) %>%
+  mutate(
+    gsize = n(),
+    gmix1 = mean(ix1),
+    gmix2 = mean(ix2)
+  ) %>%
+  summarize(
+    gsize = mean(gsize),
+    gmix1 = mean(gmix1),
+    gmix2 = mean(gmix2)
+  ) %>%
+  mutate(
+    am.gsize = gsize - mean(gsize),
+    am.gmix1 = gmix1 - mean(gmix1),
+    am.gmix2 = gmix2 - mean(gmix2)
+  )
+clus22a
+```
+
+```{r}
+clus22 <- 
+  clus22 %>%
+  inner_join(clus22a, by = "gid")
+```
+
+```{r}
+df <- clus22
+df_m0 <- lmer(y ~ 1 + (1 | gid), data = df)
+summary(df_m0)
+```
+
+```{r}
+var.cov <- data.frame(VarCorr(df_m0))
+var.cov$vcov[1] / sum(var.cov$vcov)
+```
+
+```{r}
+AIC(df_m0)
+BIC(df_m0)
+```
+
+```{r}
+df_m1a <- lmer(
+  y ~ ix1_gm + ix2_gm + (ix1_gm | gid),
+  data = df
+)
+summary(df_m1a)
+```
+
+
+```{r}
+df_m1b <- lmer(
+  y ~ ix1_gm + ix2_gm + (ix2_gm | gid),
+  data = df
+)
+summary(df_m1b)
+```
+
+```{r}
+df_m1c <- lmer(
+  y ~ ix1_gm + ix2_gm + (ix1_gm + ix2_gm | gid),
+  data = df
+)
+summary(df_m1c)
+```
+
+```{r}
+AIC(df_m1a, df_m1b, df_m1c)
+BIC(df_m1a, df_m1b, df_m1c)
+```
+
+
+
+
+
+
+
+```{r}
+df_m2a <- lmer(y ~ gx1_am * (ix1_gm + ix2_gm) + (ix2_gm | gid), data = df)
+summary(df_m2a)
+```
+
+```{r}
+df_m2b <- lmer(y ~ (gx1_am + am.gsize) * (ix1_gm + ix2_gm) + (ix2_gm | gid), data = df)
+summary(df_m2b)
+```
+
+```{r}
+df %>%
+  group_by(gid) %>%
+  summarise(
+    x.min = min(ix2_gm),
+    x.max = max(ix2_gm),
+    am.gx1 = mean(gx1_am),
+    gx1 = mean(gx1)
+  ) %>%
+  gather(
+    "value", gm.ix2, -gid, -am.gx1, -gx1
+  ) %>%
+  mutate(range = value == "x.min", 0, 1) ->
+  fig.data
+table(fig.data$gx1)
+```
+
+```{r}
+fig.data$gx1_am <- 0
+fig.data$predy <- predict(df_m2b, newdata = fig.data)
+```
+

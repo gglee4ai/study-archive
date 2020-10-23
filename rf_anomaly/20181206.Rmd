@@ -1,0 +1,21 @@
+---
+title: "Anomaly Detection"
+output: html_notebook
+---
+
+```{r}
+userb <- read.csv("http://cfile240.uf.daum.net/attach/996FE63359E42A3D1F20F7")
+daub <- read.csv("http://cfile233.uf.daum.net/attach/9910C03359E42A3526C6C9")
+```
+
+```{r}
+d <- userb
+d
+```
+
+```{r}
+str(d)
+plot(d$install_date)
+plot(d$user_id)
+```
+

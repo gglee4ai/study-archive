@@ -1,0 +1,20 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(caret)
+library(AppliedPredictiveModeling)
+data(concrete)
+str(concrete)
+str(mixtures)
+```
+
+```{r}
+featurePlot(
+  x = concrete[, -CompressiveStrength],
+  y = concrete$CompressiveStrength
+)
+```
+

@@ -1,0 +1,315 @@
+---
+title: "Extrapolating with B splines and GAMs"
+output: html_notebook
+---
+
+
+```{r}
+# remotes::install_github("clauswilke/colorblindr")
+# remotes::install_github("clauswilke/relayer")
+```
+
+```{r}
+library(tidyverse)
+library(mgcv)
+library(gratia)
+library(patchwork)
+library(colorblindr)
+library(relayer)
+```
+
+
+```{r}
+load(url("https://bit.ly/gprocdata"))
+ls()
+```
+
+
+```{r}
+seed <- 1234
+set.seed(seed)
+gp_data <- 
+  tibble(truth = unname(f_true), x = seq(-1, 1, by = 0.002)) %>% 
+  mutate(y = truth + rnorm(length(truth), 0, 0.2))
+gp_data
+```
+
+```{r}
+gp_data %>% 
+  ggplot(aes(x, y)) +
+  geom_point() +
+  geom_line(aes(x, truth), color = "red")
+```
+
+```{r}
+set.seed(seed)
+r_samp <- sample_n(gp_data, size = 250) %>% 
+  arrange(x) %>% 
+  mutate(data_set = case_when(x < -0.8 ~ "test",
+                              x > 0.8 ~ "test",
+                              x > -0.45 & x < -0.36 ~ "test",
+                              x > -0.05 & x < -0.05 ~ "test",
+                              x > -0.45 & x < -0.6 ~ "test",
+                              TRUE ~ "train"))
+```
+
+
+```{r}
+ggplot(r_samp, aes(x, y, color = data_set)) +
+  geom_line(aes(y = truth, color = NULL), show.legend = FALSE, alpha = 0.5) +
+  geom_point() +
+  scale_colour_brewer(palette = "Set1", name = "Data set")
+```
+
+
+```{r}
+m_tprs2 <- gam(y ~ s(x, k = 50, bs = "tp", m = 2), 
+               data = filter(r_samp, data_set == "train"), method = "REML")
+m_tprs1 <- gam(y ~ s(x, k = 50, bs = "tp", m = 1), 
+               data = filter(r_samp, data_set == "train"), method = "REML")
+```
+
+
+```{r}
+new_data <- tibble(x = seq(-1.5, 1.5, by = 0.002))
+```
+
+
+```{r}
+p_tprs2 <- as_tibble(predict(m_tprs2, new_data, se.fit = TRUE)) %>% 
+  rename(fit_tprs_2 = fit, se_tprs_2 = se.fit)
+p_tprs1 <- as_tibble(predict(m_tprs1, new_data, se.fit = TRUE)) %>% 
+  rename(fit_tprs_1 = fit, se_tprs_1 = se.fit)
+```
+
+
+```{r}
+crit <- qnorm((1 - 0.89) / 2, lower.tail = FALSE)
+new_data_tprs <- 
+  bind_cols(new_data, p_tprs2, p_tprs1) %>% 
+  pivot_longer(fit_tprs_2:se_tprs_1, names_sep = '_', names_to = c('variable', 'spline', 'order')) %>% 
+  pivot_wider(names_from = variable, values_from = value) %>% 
+  mutate(upr_ci = fit + (crit * se), lwr_ci = fit - (crit * se))
+new_data_tprs
+```
+
+```{r}
+ggplot(mapping = aes(x = x, y = y)) +
+    geom_ribbon(data = new_data_tprs,
+                mapping = aes(ymin = lwr_ci, ymax = upr_ci, x = x,
+                              fill = order),
+                inherit.aes = FALSE, alpha = 0.2) +
+    geom_point(data = r_samp, aes(colour = data_set)) +
+    geom_line(data = new_data_tprs, aes(y = fit, x = x, colour2 = order),
+              size = 1) %>%
+    rename_geom_aes(new_aes = c("colour" = "colour2")) +
+    scale_colour_brewer(palette = "Set1", aesthetics = "colour",
+                        name = "Data set") +
+    scale_colour_OkabeIto(aesthetics = "colour2", name = "Penalty") +
+    scale_fill_OkabeIto(name = "Penalty") +
+    coord_cartesian(ylim = c(-2, 2)) +
+    labs(title = "Extrapolating with thin plate splines",
+         subtitle = "How behaviour varies with derivative penalties of different order")
+```
+
+
+
+```{r}
+m_bs_default <- gam(y ~ s(x, k = 50, bs = "bs", m = c(3, 2)),
+                    data = filter(r_samp, data_set == "train"), method = "REML")
+```
+
+
+```{r}
+knots <- list(x = c(-2, -0.9, 0.9, 2))
+```
+
+
+
+```{r}
+m_bs_extrap <- gam(y ~ s(x, k = 50, bs = "bs", m = c(3, 2)), method = "REML",
+                   data = filter(r_samp, data_set == "train"), knots = knots)
+```
+
+
+```{r}
+bs_default <- basis(s(x, k = 50, bs = "bs", m = c(3, 2)), knots = knots,
+                    data = filter(new_data, x >= -0.8 & x <= 0.8))
+bs_extrap <- basis(s(x, k = 50, bs = "bs", m = c(3, 2)), knots = knots,
+                   data = new_data)
+lims <- lims(x = c(-1.5, 1.5))
+vlines <- geom_vline(data = tibble(x = c(-0.8, 0.8)),
+                     aes(xintercept = x), lty = "dashed")
+(draw(bs_default) + lims + vlines) / (draw(bs_extrap) + lims + vlines) +
+    plot_annotation(tag_levels = 'A')
+```
+
+
+```{r}
+p_bs_default <- as_tibble(predict(m_bs_default, new_data, se.fit = TRUE)) %>%
+    rename(fit_bs_default = fit, se_bs_default = se.fit)
+p_bs_extrap <- as_tibble(predict(m_bs_extrap, new_data, se.fit = TRUE)) %>%
+    rename(fit_bs_extrap = fit, se_bs_extrap = se.fit)
+
+new_data_bs_eg <- bind_cols(new_data, p_bs_default, p_bs_extrap) %>%
+    pivot_longer(fit_bs_default:se_bs_extrap, names_sep = '_',
+                 names_to = c('variable', 'spline', 'penalty')) %>%
+    pivot_wider(names_from = variable, values_from = value) %>%
+    mutate(upr_ci = fit + (crit * se), lwr_ci = fit - (crit * se))
+```
+
+
+```{r}
+ggplot(mapping = aes(x = x, y = y)) +
+    geom_ribbon(data = new_data_bs_eg,
+                mapping = aes(ymin = lwr_ci, ymax = upr_ci, x = x, fill = penalty),
+                inherit.aes = FALSE, alpha = 0.2) +
+    geom_point(data = r_samp, aes(colour = data_set)) +
+    geom_line(data = new_data_bs_eg, aes(y = fit, x = x, colour2 = penalty),
+              size = 1) %>%
+    rename_geom_aes(new_aes = c("colour" = "colour2")) +
+    scale_colour_brewer(palette = "Set1", aesthetics = "colour", name = "Data set") +
+    scale_colour_OkabeIto(aesthetics = "colour2", name = "Penalty") +
+    scale_fill_OkabeIto(name = "Penalty") +
+    coord_cartesian(ylim = c(-2, 2)) +
+    labs(title = "Extrapolating with B splines",
+         subtitle = "How behaviour varies when the penalty extends beyond the data")
+```
+
+
+
+```{r}
+m_gp <- gam(y ~ s(x, k = 50, bs = "gp", m = c(3, 0.15)),
+            data = filter(r_samp, data_set == "train"), method = "REML")
+```
+
+
+```{r}
+p_bs <- as_tibble(predict(m_bs_extrap, new_data, se.fit = TRUE)) %>%
+    rename(fit_bs = fit, se_bs = se.fit)
+p_tprs <- as_tibble(predict(m_tprs2, new_data, se.fit = TRUE)) %>%
+    rename(fit_tprs = fit, se_tprs = se.fit)
+p_gp <- as_tibble(predict(m_gp, new_data, se.fit = TRUE)) %>%
+    rename(fit_gp = fit, se_gp = se.fit)
+
+new_data_bases <- bind_cols(new_data, p_tprs, p_bs, p_gp) %>%
+    pivot_longer(fit_tprs:se_gp, names_sep = '_',
+                 names_to = c('variable', 'spline')) %>%
+    pivot_wider(names_from = variable, values_from = value) %>%
+    mutate(upr_ci = fit + (2 * se), lwr_ci = fit - (2 * se))
+```
+
+
+
+```{r}
+ggplot(mapping = aes(x = x, y = y)) +
+    geom_ribbon(data = new_data_bases,
+                mapping = aes(ymin = lwr_ci, ymax = upr_ci, x = x, fill = spline),
+                inherit.aes = FALSE, alpha = 0.2) +
+    geom_point(data = r_samp, aes(colour = data_set)) +
+    geom_line(data = new_data_bases, aes(y = fit, x = x, colour2 = spline),
+              size = 1) %>%
+    rename_geom_aes(new_aes = c("colour" = "colour2")) +
+    scale_colour_brewer(palette = "Set1", aesthetics = "colour", name = "Data set") +
+    scale_colour_OkabeIto(aesthetics = "colour2", name = "Basis") +
+    scale_fill_OkabeIto(name = "Basis") +
+    coord_cartesian(ylim = c(-2, 2)) +
+    labs(title = "Extrapolating with splines",
+         subtitle = "How behaviour varies with different basis types")
+```
+
+
+
+```{r}
+m_bs_2 <- gam(y ~ s(x, k = 50, bs = "bs", m = c(3, 2)), method = "REML",
+              data = filter(r_samp, data_set == "train"), knots = knots)
+m_bs_1 <- gam(y ~ s(x, k = 50, bs = "bs", m = c(3, 1)), method = "REML",
+              data = filter(r_samp, data_set == "train"), knots = knots)
+m_bs_0 <- gam(y ~ s(x, k = 50, bs = "bs", m = c(3, 0)), method = "REML",
+              data = filter(r_samp, data_set == "train"), knots = knots)
+```
+
+
+
+```{r}
+p_bs_2 <- as_tibble(predict(m_bs_2, new_data, se.fit = TRUE)) %>%
+    rename(fit_bs_2 = fit, se_bs_2 = se.fit)
+p_bs_1 <- as_tibble(predict(m_bs_1, new_data, se.fit = TRUE)) %>%
+    rename(fit_bs_1 = fit, se_bs_1 = se.fit)
+p_bs_0 <- as_tibble(predict(m_bs_0, new_data, se.fit = TRUE)) %>%
+    rename(fit_bs_0 = fit, se_bs_0 = se.fit)
+
+new_data_order <- bind_cols(new_data, p_bs_2, p_bs_1, p_bs_0) %>%
+    pivot_longer(fit_bs_2:se_bs_0, names_sep = '_',
+                 names_to = c('variable', 'spline', 'order')) %>%
+    pivot_wider(names_from = variable, values_from = value) %>%
+    mutate(upr_ci = fit + (2 * se), lwr_ci = fit - (2 * se))
+```
+
+
+```{r}
+ggplot(mapping = aes(x = x, y = y)) +
+    geom_ribbon(data = new_data_order,
+                mapping = aes(ymin = lwr_ci, ymax = upr_ci, x = x, fill = order),
+                inherit.aes = FALSE, alpha = 0.2) +
+    geom_point(data = r_samp, aes(colour = data_set)) +
+    geom_line(data = new_data_order, aes(y = fit, x = x, colour2 = order),
+              size = 1) %>%
+    rename_geom_aes(new_aes = c("colour" = "colour2")) +
+    scale_colour_brewer(palette = "Set1", aesthetics = "colour", name = "Data set") +
+    scale_colour_OkabeIto(aesthetics = "colour2", name = "Penalty") +
+    scale_fill_OkabeIto(name = "Penalty") +
+    coord_cartesian(ylim = c(-2, 2)) +
+    labs(title = "Extrapolating with B splines",
+         subtitle = "How behaviour varies with penalties of different order")
+```
+
+
+
+```{r}
+m_bs_21 <- gam(y ~ s(x, k = 50, bs = "bs", m = c(3, 2, 1)), method = "REML",
+                data = filter(r_samp, data_set == "train"), knots = knots)
+```
+
+
+```{r}
+m_bs_210 <- gam(y ~ s(x, k = 50, bs = "bs", m = c(3, 2, 1, 0)), method = "REML",
+                data = filter(r_samp, data_set == "train"), knots = knots)
+```
+
+
+
+```{r}
+p_bs_21 <- as_tibble(predict(m_bs_21, new_data, se.fit = TRUE)) %>%
+    rename(fit_bs_21 = fit, se_bs_21 = se.fit)
+p_bs_210 <- as_tibble(predict(m_bs_210, new_data, se.fit = TRUE)) %>%
+    rename(fit_bs_210 = fit, se_bs_210 = se.fit)
+
+new_data_multi <- bind_cols(new_data, p_bs_2, p_bs_21, p_bs_210) %>%
+    pivot_longer(fit_bs_2:se_bs_210, names_sep = '_',
+                 names_to = c('variable', 'spline', 'order')) %>%
+    pivot_wider(names_from = variable, values_from = value) %>%
+    mutate(upr_ci = fit + (2 * se), lwr_ci = fit - (2 * se),
+           penalty = case_when(order == "2" ~ "2",
+                               order == "21" ~ "2, 1",
+                               order == "210" ~ "2, 1, 0"))
+```
+
+
+```{r}
+ggplot(mapping = aes(x = x, y = y)) +
+    geom_ribbon(data = new_data_multi,
+                mapping = aes(ymin = lwr_ci, ymax = upr_ci, x = x, fill = penalty),
+                inherit.aes = FALSE, alpha = 0.2) +
+    geom_point(data = r_samp, aes(colour = data_set)) +
+    geom_line(data = new_data_multi, aes(y = fit, x = x, colour2 = penalty),
+              size = 1) %>%
+    rename_geom_aes(new_aes = c("colour" = "colour2")) +
+    scale_colour_brewer(palette = "Set1", aesthetics = "colour", name = "Data set") +
+    scale_colour_OkabeIto(aesthetics = "colour2", name = "Penalty") +
+    scale_fill_OkabeIto(name = "Penalty") +
+    coord_cartesian(ylim = c(-2, 2)) +
+    labs(title = "Extrapolating with B splines",
+         subtitle = "How behaviour changes when combining multiple penalties")
+```
+

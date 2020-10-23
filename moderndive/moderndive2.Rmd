@@ -1,0 +1,630 @@
+---
+title: "ModernDive 7-11"
+output: 
+  html_notebook: 
+    toc: yes
+---
+
+# Chapter 7
+
+```{r}
+library(tidyverse)
+library(moderndive)
+```
+
+```{r}
+bowl
+```
+
+```{r}
+virtual_shovel <- bowl %>%
+  rep_sample_n(size = 50)
+virtual_shovel
+```
+
+```{r}
+virtual_shovel %>%
+  summarize(num_red = sum(color == "red")) %>%
+  mutate(prop_red = num_red / 50)
+```
+
+
+```{r}
+virtual_samples <- bowl %>%
+  rep_sample_n(size = 50, reps = 33)
+virtual_samples
+```
+
+```{r}
+virtual_prop_red <- virtual_samples %>%
+  group_by(replicate) %>%
+  summarize(red = sum(color == "red")) %>%
+  mutate(prop_red = red / 50)
+virtual_prop_red
+```
+
+```{r}
+virtual_prop_red %>%
+  ggplot(aes(prop_red)) +
+  geom_histogram(binwidth = 0.05, boundary = 0.4, color = "white") +
+  labs(x = "Proportion of 50 balls that were red",
+       title = "Distribution of 33 proportions red")
+```
+
+```{r}
+virtual_samples <- bowl %>%
+  rep_sample_n(size = 50, reps = 1000)
+virtual_samples
+```
+
+```{r}
+virtual_prop_red <- virtual_samples %>%
+  group_by(replicate) %>%
+  summarize(red = sum(color == "red")) %>%
+  mutate(prop_red = red / 50)
+virtual_prop_red
+```
+
+
+```{r}
+ggplot(virtual_prop_red, aes(x = prop_red)) +
+  geom_histogram(binwidth = 0.05, boundary = 0.4, color = "white") +
+  labs(x = "Proportion of 50 balls that were red", 
+       title = "Distribution of 1000 proportions red") 
+```
+
+
+```{r}
+# Segment 1: sample size = 25 ------------------------------
+# 1.a) Virtually use shovel 1000 times
+virtual_samples_25 <- bowl %>% 
+  rep_sample_n(size = 25, reps = 1000)
+
+# 1.b) Compute resulting 1000 replicates of proportion red
+virtual_prop_red_25 <- virtual_samples_25 %>% 
+  group_by(replicate) %>% 
+  summarize(red = sum(color == "red")) %>% 
+  mutate(prop_red = red / 25)
+
+# 1.c) Plot distribution via a histogram
+ggplot(virtual_prop_red_25, aes(x = prop_red)) +
+  geom_histogram(binwidth = 0.05, boundary = 0.4, color = "white") +
+  labs(x = "Proportion of 25 balls that were red", title = "25") 
+
+
+# Segment 2: sample size = 50 ------------------------------
+# 2.a) Virtually use shovel 1000 times
+virtual_samples_50 <- bowl %>% 
+  rep_sample_n(size = 50, reps = 1000)
+
+# 2.b) Compute resulting 1000 replicates of proportion red
+virtual_prop_red_50 <- virtual_samples_50 %>% 
+  group_by(replicate) %>% 
+  summarize(red = sum(color == "red")) %>% 
+  mutate(prop_red = red / 50)
+
+# 2.c) Plot distribution via a histogram
+ggplot(virtual_prop_red_50, aes(x = prop_red)) +
+  geom_histogram(binwidth = 0.05, boundary = 0.4, color = "white") +
+  labs(x = "Proportion of 50 balls that were red", title = "50")  
+
+
+# Segment 3: sample size = 100 ------------------------------
+# 3.a) Virtually using shovel with 100 slots 1000 times
+virtual_samples_100 <- bowl %>% 
+  rep_sample_n(size = 100, reps = 1000)
+
+# 3.b) Compute resulting 1000 replicates of proportion red
+virtual_prop_red_100 <- virtual_samples_100 %>% 
+  group_by(replicate) %>% 
+  summarize(red = sum(color == "red")) %>% 
+  mutate(prop_red = red / 100)
+
+# 3.c) Plot distribution via a histogram
+ggplot(virtual_prop_red_100, aes(x = prop_red)) +
+  geom_histogram(binwidth = 0.05, boundary = 0.4, color = "white") +
+  labs(x = "Proportion of 100 balls that were red", title = "100") 
+```
+
+
+```{r}
+bowl %>%
+  summarize(sum_red = sum(color == "red"),
+            sum_not_red = sum(color != "red"))
+```
+
+
+
+# Chapter 8
+
+```{r}
+pennies_sample
+```
+
+```{r}
+pennies_sample %>%
+  ggplot(aes(year)) +
+  geom_histogram(binwidth = 10, color = "white")
+```
+
+```{r}
+pennies_sample %>%
+  summarize(mean_year = mean(year))
+```
+
+```{r}
+pennies_resample <- tibble(
+  year = c(1976, 1962, 1976, 1983, 2017, 2015, 2015, 1962, 2016, 1976, 
+           2006, 1997, 1988, 2015, 2015, 1988, 2016, 1978, 1979, 1997, 
+           1974, 2013, 1978, 2015, 2008, 1982, 1986, 1979, 1981, 2004, 
+           2000, 1995, 1999, 2006, 1979, 2015, 1979, 1998, 1981, 2015, 
+           2000, 1999, 1988, 2017, 1992, 1997, 1990, 1988, 2006, 2000)
+)
+```
+
+```{r}
+pennies_resample %>%
+  ggplot(aes(year)) +
+  geom_histogram(binwidth = 10, color = "white")
+```
+
+
+```{r}
+pennies_resamples
+```
+
+```{r}
+resampled_means <- pennies_resamples %>%
+  group_by(name) %>%
+  summarize(mean_year = mean(year))
+resampled_means
+```
+
+```{r}
+resampled_means %>%
+  ggplot(aes(mean_year)) +
+  geom_histogram(boundary = 1990, binwidth = 1, color ="white")
+```
+
+```{r}
+pennies_resamples %>%
+  ungroup() %>%
+  summarize(mean_mean_year = mean(year))
+```
+
+
+```{r}
+virtual_resample <- pennies_sample %>%
+  rep_sample_n(size = 50, replace = TRUE, reps = 1000)
+virtual_resample
+```
+
+```{r}
+virtual_resampled_means <- virtual_resample %>%
+  group_by(replicate) %>%
+  summarize(mean_year = mean(year))
+virtual_resampled_means
+```
+
+```{r}
+virtual_resampled_means %>%
+  ggplot(aes(mean_year)) +
+  geom_histogram(boundary = 1996, binwidth = 1, color = "white")
+```
+
+
+```{r}
+virtual_resampled_means %>%
+  summarize(M = mean(mean_year),
+            SE = sd(mean_year))
+```
+
+```{r}
+1995.515 - 1.96 * 2.137106
+1995.515 + 1.96 * 2.137106
+```
+
+```{r}
+quantile(virtual_resampled_means$mean_year, probs = c(0.025, 0.975))
+```
+
+```{r}
+library(infer)
+bootstrap_distribution <- pennies_sample %>%
+  specify(response = year) %>%
+  generate(reps = 1000, type = "bootstrap") %>%
+  calculate(stat = "mean")
+```
+
+```{r}
+visualize(bootstrap_distribution)
+```
+
+```{r}
+percentile_ci <- bootstrap_distribution %>%
+  get_confidence_interval(level = 0.95, type = "percentile")
+percentile_ci
+```
+
+```{r}
+visualize(bootstrap_distribution) +
+  shade_confidence_interval(endpoints = percentile_ci)
+```
+
+
+```{r}
+visualize(bootstrap_distribution) + 
+  shade_ci(endpoints = percentile_ci, color = "hotpink", fill = "khaki")
+```
+
+```{r}
+library(infer)
+sample_1_bootstrap <- bowl_sample_1 %>%
+  specify(response = color, success = "red") %>%
+  generate(reps = 1000, type = "bootstrap") %>%
+  calculate(stat = "prop")
+sample_1_bootstrap
+```
+
+```{r}
+percentile_ci_1 <- sample_1_bootstrap %>%
+  get_confidence_interval(level = 0.95, type = "percentile")
+percentile_ci_1
+```
+
+```{r}
+sample_1_bootstrap %>%
+  visualize(bins = 15) +
+  shade_confidence_interval(endpoints = percentile_ci_1) +
+  geom_vline(xintercept = 0.375, linetype = "dashed")
+```
+
+
+
+```{r}
+mythbusters_yawn %>%
+  group_by(group, yawn) %>%
+  summarize(count = n())
+```
+
+```{r}
+mythbusters_yawn %>%
+  specify(formula = yawn ~ group, success = "yes")
+```
+
+```{r}
+bootstrap_distribution_yawning <- mythbusters_yawn %>%
+  specify(formula = yawn ~ group, succes = "yes") %>%
+  generate(reps = 1000, type = "bootstrap") %>%
+  calculate(stat = "diff in props", order = c("control", "seed"))
+bootstrap_distribution_yawning
+```
+
+```{r}
+visualize(bootstrap_distribution_yawning) +
+  geom_vline(xintercept = 0)
+```
+
+```{r}
+bootstrap_distribution_yawning %>% 
+  get_confidence_interval(type = "percentile", level = 0.95)
+```
+
+
+```{r}
+obs_diff_in_props <- mythbusters_yawn %>% 
+  specify(formula = yawn ~ group, success = "yes") %>% 
+  # generate(reps = 1000, type = "bootstrap") %>% 
+  calculate(stat = "diff in props", order = c("seed", "control"))
+obs_diff_in_props
+```
+
+
+```{r}
+myth_ci_se <- bootstrap_distribution_yawning %>% 
+  get_confidence_interval(type = "se", point_estimate = obs_diff_in_props)
+myth_ci_se
+```
+
+```{r}
+conf_ints <- tactile_prop_red %>% 
+  rename(p_hat = prop_red) %>% 
+  mutate(
+    n = 50,
+    SE = sqrt(p_hat * (1 - p_hat) / n),
+    MoE = 1.96 * SE,
+    lower_ci = p_hat - MoE,
+    upper_ci = p_hat + MoE
+  )
+conf_ints
+```
+
+
+# Chapter 9
+
+```{r}
+library(tidyverse)
+library(infer)
+library(moderndive)
+library(nycflights13)
+library(ggplot2movies)
+#install.packages("ggplot2movies")
+```
+
+```{r}
+promotions %>%
+  sample_n(size = 6)
+```
+
+```{r}
+promotions %>%
+  ggplot(aes(gender, fill = decision)) +
+  geom_bar() +
+  labs(x = "Gender of name on resume")
+```
+
+```{r}
+promotions %>%
+  group_by(gender, decision) %>%
+  tally()
+```
+
+```{r}
+promotions %>%
+  count(gender, decision)
+```
+
+```{r}
+promotions_shuffled %>%
+  ggplot(aes(x = gender, fill = decision)) +
+  geom_bar() +
+  labs(x = "Gender of resumen name")
+```
+
+```{r}
+promotions_shuffled %>%
+  group_by(gender, decision) %>%
+  tally()
+```
+
+
+```{r}
+null_distribution <- promotions %>%
+  specify(decision ~ gender, success = "promoted") %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 1000, type = "permute") %>%
+  calculate(stat = "diff in props", order = c("male", "female"))
+null_distribution
+```
+
+```{r}
+obs_diff_prop <- promotions %>%
+  specify(decision ~ gender, success = "promoted") %>%
+  calculate(stat = "diff in props", order = c("male", "female"))
+obs_diff_prop
+```
+
+```{r}
+visualize(null_distribution, bins = 10) +
+  shade_p_value(obs_stat = obs_diff_prop, direction = "right")
+```
+
+```{r}
+null_distribution %>%
+  get_p_value(obs_stat = obs_diff_prop, direction = "right")
+```
+
+
+```{r}
+bootstrap_distribution <- promotions %>% 
+  specify(formula = decision ~ gender, success = "promoted") %>% 
+  # Change 1 - Remove hypothesize():
+  # hypothesize(null = "independence") %>% 
+  # Change 2 - Switch type from "permute" to "bootstrap":
+  generate(reps = 1000, type = "bootstrap") %>% 
+  calculate(stat = "diff in props", order = c("male", "female"))
+```
+
+```{r}
+percentile_ci <- bootstrap_distribution %>%
+  get_confidence_interval(level = 0.95, type = "percentile")
+percentile_ci
+```
+
+```{r}
+visualize(bootstrap_distribution) +
+  shade_confidence_interval(endpoints = percentile_ci)
+```
+
+
+
+```{r}
+movies_sample
+```
+
+
+```{r}
+movies_sample %>%
+  ggplot(aes(genre, rating)) +
+  geom_boxplot() +
+  labs(y = "IMDB rating")
+```
+
+```{r}
+movies_sample %>%
+  group_by(genre) %>%
+  summarize(n = n(), mean_rating = mean(rating), std_dev = sd(rating))
+```
+
+```{r}
+null_distribution_movies <- movies_sample %>%
+  specify(rating ~ genre) %>%
+  hypothesize(null = "independence") %>%
+  generate(reps = 1000, type = "permute") %>%
+  calculate(stat = "diff in means", order = c("Action", "Romance"))
+null_distribution_movies
+```
+
+```{r}
+obs_diff_means <- movies_sample %>%
+  specify(rating ~ genre) %>%
+  calculate(stat = "diff in means", order = c("Action", "Romance"))
+obs_diff_means
+```
+
+
+```{r}
+visualize(null_distribution_movies, bins = 10) +
+  shade_p_value(obs_stat = obs_diff_means, direction = "both")
+```
+
+```{r}
+null_distribution_movies %>%
+get_p_value(obs_stat = obs_diff_means, direction = "both")
+```
+
+
+```{r}
+# Construct null distribution of xbar_a - xbar_m:
+null_distribution_movies <- movies_sample %>% 
+  specify(formula = rating ~ genre) %>% 
+  hypothesize(null = "independence") %>% 
+  generate(reps = 1000, type = "permute") %>% 
+  calculate(stat = "diff in means", order = c("Action", "Romance"))
+visualize(null_distribution_movies, bins = 10)
+```
+
+```{r}
+# Construct null distribution of t:
+null_distribution_movies_t <- movies_sample %>% 
+  specify(formula = rating ~ genre) %>% 
+  hypothesize(null = "independence") %>% 
+  generate(reps = 1000, type = "permute") %>% 
+  # Notice we switched stat from "diff in means" to "t"
+  calculate(stat = "t", order = c("Action", "Romance"))
+visualize(null_distribution_movies_t, bins = 10)
+```
+
+
+```{r}
+visualize(null_distribution_movies_t, bins = 10, method = "both")
+```
+
+```{r}
+obs_two_sample_t <- movies_sample %>% 
+  specify(formula = rating ~ genre) %>% 
+  calculate(stat = "t", order = c("Action", "Romance"))
+obs_two_sample_t
+```
+
+```{r}
+flights_sample <- flights %>%
+  filter(carrier %in% c("HA", "AS"))
+
+flights_sample %>%
+  ggplot(aes(carrier, air_time)) +
+  geom_boxplot()
+```
+
+```{r}
+flights_sample %>%
+  group_by(carrier, dest) %>%
+  summarize(n = n(), mean_time = mean(air_time, na.rm = TRUE))
+```
+
+
+# Chapter 10
+
+
+```{r}
+evals_ch5 <- evals %>%
+  select(ID, score, bty_avg, age)
+evals_ch5
+```
+
+```{r}
+evals_ch5 %>%
+  ggplot(aes(bty_avg, score)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+```{r}
+score_model <- lm(score ~ bty_avg, data = evals_ch5)
+get_regression_table(score_model)
+```
+
+```{r}
+score_model <- lm(score ~ bty_avg, data = evals_ch5)
+regression_points <- get_regression_points(score_model)
+regression_points
+```
+
+```{r}
+regression_points %>%
+  ggplot(aes(residual)) +
+  geom_histogram(binwidth = 0.25, color = "white") +
+  labs(x = "Residual")
+```
+
+```{r}
+summary(score_model)
+```
+
+```{r}
+bootstrap_distn_slope <- evals_ch5 %>%
+  specify(score ~ bty_avg) %>%
+  generate(reps = 1000, type = "bootstrap") %>%
+  calculate(stat = "slope")
+bootstrap_distn_slope
+```
+
+```{r}
+visualize(bootstrap_distn_slope)
+```
+
+```{r}
+percentile_ci <- bootstrap_distn_slope %>%
+  get_confidence_interval(type = "percentile", level = 0.95)
+percentile_ci
+```
+
+```{r}
+observed_slope <- evals %>%
+  specify(score ~ bty_avg) %>%
+  calculate(stat = "slope")
+observed_slope
+```
+
+
+```{r}
+se_ci <- bootstrap_distn_slope %>%
+  get_ci(level = 0.95, type = "se", point_estimate = observed_slope)
+se_ci
+```
+
+```{r}
+visualize(bootstrap_distn_slope) + 
+  shade_confidence_interval(endpoints = percentile_ci, fill = NULL, 
+                            linetype = "solid", color = "grey90") + 
+  shade_confidence_interval(endpoints = se_ci, fill = NULL, 
+                            linetype = "dashed", color = "grey60") +
+  shade_confidence_interval(endpoints = c(0.035, 0.099), fill = NULL, 
+                            linetype = "dotted", color = "black")
+```
+
+
+
+```{r}
+null_distn_slope <- evals %>% 
+  specify(score ~ bty_avg) %>%
+  hypothesize(null = "independence") %>% 
+  generate(reps = 1000, type = "permute") %>% 
+  calculate(stat = "slope")
+summary(score_model)
+```
+
+
+
+
+

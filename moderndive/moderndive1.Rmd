@@ -1,0 +1,703 @@
+---
+title: "moderndive"
+date: 2020-05-19
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(nycflights13)
+library(knitr)
+```
+
+```{r}
+flights
+```
+
+```{r}
+glimpse(flights)
+```
+
+```{r}
+airlines
+```
+
+```{r}
+airlines$name
+```
+
+```{r}
+alaska_flights<- flights %>%
+  filter(carrier == "AS")
+```
+
+```{r}
+alaska_flights %>%
+  ggplot(aes(dep_delay, arr_delay)) +
+  geom_point()
+```
+
+
+```{r}
+alaska_flights %>%
+  ggplot(aes(dep_delay, arr_delay)) +
+  geom_point(alpha = 0.2)
+```
+
+```{r}
+alaska_flights %>%
+  ggplot(aes(dep_delay, arr_delay)) +
+  geom_jitter(width = 30, height = 30)
+```
+
+```{r}
+early_january_weather <- weather %>%
+  filter(origin == "EWR" & month == 1 & day <= 15)
+early_january_weather
+```
+
+```{r}
+early_january_weather %>%
+  ggplot(aes(time_hour, temp)) +
+  geom_line()
+```
+
+
+```{r}
+weather %>%
+  ggplot(aes(temp)) +
+  geom_histogram(color = "white", fill = "steelblue")
+```
+
+```{r}
+weather %>%
+  ggplot(aes(temp)) +
+  geom_histogram(bins = 10, color = "white")
+```
+
+```{r}
+weather %>%
+  ggplot(aes(temp)) +
+  geom_histogram(binwidth = 5, color = "white") +
+  facet_wrap(~ month, nrow = 4)
+```
+
+
+```{r}
+weather %>%
+  ggplot(aes(factor(month), temp)) + 
+  geom_boxplot()
+```
+
+
+```{r}
+fruits <- tibble(
+  fruit = c("apple", "apple", "orange", "apple", "orange")
+)
+fruits
+```
+
+```{r}
+fruits_counted <- tibble(
+  fruit = c("apple", "orange"),
+  number = c(3, 2)
+)
+fruits_counted
+```
+
+```{r}
+fruits %>%
+  ggplot(aes(fruit)) +
+  geom_bar()
+```
+
+```{r}
+fruits_counted %>%
+  ggplot(aes(fruit, number)) +
+  geom_col()
+```
+
+
+```{r}
+flights %>%
+  ggplot(aes(carrier)) +
+  geom_bar()
+```
+
+```{r}
+flights %>%
+  ggplot(aes(carrier, fill = origin)) +
+  geom_bar()
+```
+
+```{r}
+flights %>%
+  ggplot(aes(carrier, fill = origin)) +
+  geom_bar(position = position_dodge(preserve = "single"))
+```
+
+```{r}
+flights %>%
+  ggplot(aes(carrier)) +
+  geom_bar() +
+  facet_wrap(~origin, ncol = 1)
+```
+
+
+```{r}
+portland_flights <- flights %>%
+  filter(dest == "PDX")
+portland_flights
+```
+
+```{r}
+btv_sea_flights_fall <- flights %>%
+  filter(origin == "JFK" & (dest == "BTV" | dest == "SEA") & month >= 10)
+btv_sea_flights_fall
+```
+
+
+```{r}
+many_airports <- flights %>%
+  filter(dest %in% c("SEA", "SFO", "PDX", "BTV", "BDL"))
+many_airports
+```
+
+```{r}
+summary_temp <- weather %>%
+  summarize(mean = mean(temp, na.rm = TRUE), std_dev = sd(temp, na.rm = TRUE), n = n())
+summary_temp
+```
+
+```{r}
+summary_monthly_temp <- weather %>%
+  group_by(month) %>%
+  summarize(mean = mean(temp, na.rm = TRUE),
+            std_dev = sd(temp, na.rm = TRUE))
+summary_monthly_temp
+```
+
+
+```{r}
+diamonds %>%
+  group_by(cut) %>%
+  ungroup()
+```
+
+
+```{r}
+by_origin <- flights %>%
+  group_by(origin) %>%
+  summarize(count = n())
+by_origin
+```
+
+```{r}
+by_origin_monthly <- flights %>%
+  group_by(origin, month) %>%
+  summarize(count = n())
+by_origin_monthly
+```
+
+
+```{r}
+by_origin_monthly_incorrect <- flights %>%
+  group_by(origin) %>%
+  group_by(month) %>%
+  summarize(count = n())
+by_origin_monthly_incorrect
+```
+
+```{r}
+weather <- weather %>%
+  mutate(temp_in_C = (temp - 32) / 1.8)
+weather
+```
+
+```{r}
+summary_monthly_temp <- weather %>%
+  group_by(month) %>%
+  summarize(
+    mean_temp_in_F = mean(temp, na.rm = TRUE),
+    mean_temp_in_C = mean(temp_in_C, na.rm = TRUE)
+  )
+summary_monthly_temp
+```
+
+```{r}
+flights <- flights %>%
+  mutate(gain = dep_delay - arr_delay)
+flights %>% select(dep_delay, arr_delay, gain)
+```
+
+```{r}
+gain_summary <- flights %>%
+  summarize(
+    min = min(gain, na.rm = TRUE),
+    q1 = quantile(gain, 0.25, na.rm = TRUE),
+    median = quantile(gain, 0.5, na.rm = TRUE),
+    q3 = quantile(gain, 0.75, na.rm = TRUE),
+    max = max(gain, na.rm = TRUE),
+    mean = mean(gain, na.rm = TRUE),
+    sd = sd(gain, na.rm = TRUE),
+    missing = sum(is.na(gain))
+  )
+gain_summary
+```
+
+```{r}
+flights %>% 
+  ggplot(aes(gain)) +
+  geom_histogram(color = "white", bins = 20)
+```
+
+```{r}
+freq_dest <- flights %>%
+  group_by(dest) %>%
+  summarize(num_flights = n())
+freq_dest %>%
+  arrange(desc(num_flights))
+```
+
+```{r}
+flights_joined <- flights %>%
+  inner_join(airlines, by = "carrier")
+flights_joined
+```
+
+
+```{r}
+flights_with_airport_names <- flights %>%
+  inner_join(airports, by = c("dest" = "faa"))
+flights_with_airport_names
+```
+
+```{r}
+named_dests <- flights %>%
+  group_by(dest) %>%
+  summarize(num_flights = n()) %>%
+  arrange(desc(num_flights)) %>%
+  inner_join(airports, by = c("dest" = "faa")) %>%
+  rename(airport_name = name)
+```
+
+```{r}
+flights %>% select(starts_with("a"))
+flights %>% select(ends_with("delay"))
+flights %>% select(contains("delay"))
+```
+
+```{r}
+named_dests %>% top_n(10, wt = num_flights)
+```
+
+
+# Chapter 4
+
+```{r}
+library(tidyverse)
+library(nycflights13)
+library(fivethirtyeight)
+```
+
+
+```{r}
+dem_score <- read_csv(("https://moderndive.com/data/dem_score.csv"))
+dem_score
+```
+
+```{r}
+drinks
+```
+
+```{r}
+drinks_smaller <- drinks %>%
+  filter(country %in% c("USA", "China", "Italy", "Saudi Arabia")) %>%
+  select(-total_litres_of_pure_alcohol) %>%
+  rename(beer = beer_servings, spirit = spirit_servings, wine = wine_servings)
+drinks_smaller
+```
+
+```{r}
+drinks_smaller_tidy <- drinks_smaller %>%
+  pivot_longer(names_to = "type", values_to = "servings",
+               cols = -country)
+drinks_smaller_tidy
+```
+
+```{r}
+drinks_smaller_tidy <- drinks_smaller %>%
+  pivot_longer(names_to = "type", values_to = "servings",
+               cols = c("beer", "spirit", "wine"))
+drinks_smaller_tidy
+```
+
+```{r}
+drinks_smaller_tidy %>%
+  ggplot(aes(country, servings, fill = type)) +
+  geom_col(position = "dodge")
+```
+
+```{r}
+airline_safety_smaller <- airline_safety %>%
+  select(airline, starts_with("fatalities"))
+airline_safety_smaller
+```
+
+```{r}
+airline_safety_smaller %>%
+  rename("85_99" = fatalities_85_99, "00_14" = fatalities_00_14) %>%
+  pivot_longer(names_to = "years",
+              values_to = "fatalities",
+              cols = -airline)
+```
+
+
+
+```{r}
+guat_dem <- dem_score %>%
+  filter(country == "Guatemala")
+guat_dem
+```
+
+
+```{r}
+guat_dem_tidy <- guat_dem %>%
+  pivot_longer(
+    names_to = "year",
+    values_to = "democracy",
+    cols = -country, 
+    names_ptypes = list(year = integer())
+  )
+guat_dem_tidy
+
+
+guat_dem_tidy %>%
+  ggplot(aes(x = year, y = democracy)) +
+  geom_line() +
+  labs(x = "Year", y = "Democracy Score")
+```
+
+
+
+# Chapter 5
+
+```{r}
+library(tidyverse)
+library(moderndive)
+library(skimr)
+library(gapminder)
+```
+
+```{r}
+evals
+```
+
+```{r}
+evals_ch5 <- evals %>%
+  select(ID, score, bty_avg, age)
+evals_ch5
+```
+
+```{r}
+glimpse(evals_ch5)
+```
+
+
+```{r}
+evals_ch5 %>%
+  summarize(
+    mean_bty_avg = mean(bty_avg),
+    mean_score = mean(score),
+    median_bty_avg= median(bty_avg),
+    median_score = median(score)
+  )
+```
+
+```{r}
+evals_ch5 %>% select(score, bty_avg) %>% skim()
+```
+
+```{r}
+evals_ch5 %>%
+  get_correlation(score ~ bty_avg)
+```
+
+```{r}
+evals_ch5 %>%
+  summarize(correlation = cor(score, bty_avg))
+```
+
+
+```{r}
+evals_ch5 %>%
+  ggplot(aes(bty_avg, score)) +
+  geom_point() +
+  labs(x = "Beauty Score",
+       y = "Teaching Score",
+       title = "Scatterplat of relationship of teaching and beatury scores")
+```
+
+```{r}
+g1 <- evals_ch5 %>%
+  ggplot(aes(bty_avg, score)) +
+  geom_point(alpha = 0.3) +
+  labs(x = "Beauty Score",
+       y = "Teaching Score",
+       title = "Scatterplat of relationship of teaching and beatury scores")
+g1
+```
+
+```{r}
+g1 + 
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+```{r}
+score_model <- lm(score ~ bty_avg, data = evals_ch5)
+get_regression_table(score_model)
+```
+
+```{r}
+regression_points <- get_regression_points(score_model)
+regression_points
+```
+
+```{r}
+gapminder2007 <- gapminder %>%
+  filter(year == 2007) %>%
+  select(country, lifeExp, continent, gdpPercap)
+gapminder2007
+```
+
+```{r}
+glimpse(gapminder2007)
+```
+
+```{r}
+gapminder2007 %>%
+  select(lifeExp, continent) %>%
+  skim()
+```
+
+
+```{r}
+gapminder2007 %>%
+  ggplot(aes(lifeExp)) +
+  geom_histogram(binwidth = 5, color = "white") +
+  labs(x = "Life expectancy",
+       y = "Number of countries",
+       title = "Histogram of distrubtuion of worldwide life expectancie")
+```
+
+
+
+
+```{r}
+gapminder2007 %>%
+  ggplot(aes(lifeExp)) +
+  geom_histogram(binwidth = 5, color = "white") +
+  labs(x = "Life expectancy",
+       y = "Number of countries",
+       title = "Histogram of distrubtuion of worldwide life expectancies") +
+  facet_wrap(~ continent, nrow = 2)
+```
+
+```{r}
+gapminder2007 %>%
+  ggplot(aes(x = continent, y = lifeExp)) +
+  geom_boxplot() +
+  labs(
+    x = "Continent", y = "Life expectancy",
+    title = "Life expectancy by continent"
+  )
+```
+
+```{r}
+lifeExp_by_continent <- gapminder2007 %>%
+  group_by(continent) %>%
+  summarize(median = median(lifeExp), 
+            mean = mean(lifeExp))
+lifeExp_by_continent
+```
+
+```{r}
+lifeExp_model <- lm(lifeExp ~ continent, data = gapminder2007)
+get_regression_table(lifeExp_model)
+```
+
+```{r}
+summary(lifeExp_model)
+```
+
+```{r}
+regression_points <- get_regression_points(lifeExp_model, ID = "country")
+regression_points
+```
+
+```{r}
+score_model
+get_regression_table(score_model)
+```
+
+```{r}
+library(janitor)
+score_model %>%
+  tidy(conf.int = TRUE) %>%
+  mutate_if(is.numeric, round, digits = 3) %>%
+  clean_names() %>%
+  rename(lower_ci = conf_low, upper_ci = conf_high)
+```
+
+
+
+```{r}
+library(broom)
+score_model %>%
+  augment() %>%
+  mutate_if(is.numeric, round, digits = 3) %>%
+  clean_names() %>%
+  select(-se_fit, -hat, -sigma, -cooksd, -std_resid)
+```
+
+
+
+
+# Chapter 6
+
+
+```{r}
+evals_ch6 <- evals %>%
+  select(ID, score, age, gender)
+evals_ch6
+```
+
+```{r}
+glimpse(evals_ch6)
+```
+
+```{r}
+evals_ch6 %>% select(score, age, gender) %>% skim()
+```
+
+```{r}
+evals_ch6 %>%
+  get_correlation(formula = score ~ age)
+```
+
+```{r}
+evals_ch6 %>%
+  ggplot(aes(age, score, color = gender)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Age", y = "Teaching Score", color = "Gender")
+```
+
+```{r}
+score_model_interaction <- lm(score ~ age * gender, data = evals_ch6)
+get_regression_table(score_model_interaction)
+```
+
+```{r}
+summary(score_model_interaction)
+```
+
+```{r}
+evals_ch6 %>%
+  ggplot(aes(age, score, color = gender)) +
+  geom_point() +
+  labs(x = "Age", y = "Teaching Score", color = "Gender") +
+  geom_parallel_slopes(se = FALSE)
+```
+
+```{r}
+score_model_parallel_slopes <- lm(score ~ age + gender, data = evals_ch6)
+get_regression_table(score_model_parallel_slopes)
+```
+
+```{r}
+regression_points <- get_regression_points(score_model_interaction)
+regression_points
+```
+
+```{r}
+library(ISLR)
+```
+
+
+```{r}
+library(ISLR)
+credit_ch6 <- Credit %>% as_tibble() %>% 
+  select(ID, debt = Balance, credit_limit = Limit, 
+         income = Income, credit_rating = Rating, age = Age)
+credit_ch6
+```
+
+```{r}
+credit_ch6 %>% select(debt, credit_limit, income) %>% skim()
+```
+
+```{r}
+credit_ch6 %>%
+  select(debt, credit_limit, income) %>%
+  cor()
+```
+
+```{r}
+credit_ch6
+```
+
+
+```{r}
+library(gridExtra)
+g1 <- ggplot(credit_ch6, aes(credit_limit, debt)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+g2 <- ggplot(credit_ch6, aes(income, debt)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+grid.arrange(g1, g2, nrow = 1)
+```
+
+```{r}
+debt_model <- lm(debt ~ credit_limit + income, data = credit_ch6)
+summary(debt_model)
+```
+
+```{r}
+ggplot(MA_schools, aes(perc_disadvan, average_sat_math, color = size)) +
+  geom_point(alpha = 0.25) +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

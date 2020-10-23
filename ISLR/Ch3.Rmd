@@ -1,0 +1,230 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(MASS)
+library(ISLR)
+```
+
+```{r}
+names(Boston)
+```
+
+```{r}
+lm_fit <- lm(medv ~ lstat, data = Boston)
+summary(lm_fit)
+```
+
+```{r}
+names(lm_fit)
+```
+
+```{r}
+coef(lm_fit)
+```
+
+```{r}
+confint(lm_fit)
+```
+
+```{r}
+library(broom)
+glance(lm_fit)
+```
+
+```{r}
+tidy(lm_fit)
+```
+
+```{r}
+predict(lm_fit, data.frame(lstat = c(5, 10, 15)),
+interval = "confidence")
+```
+
+```{r}
+predict(lm_fit, data.frame(lstat = c(5, 10, 15)),
+interval = "prediction")
+
+```
+
+```{r}
+plot(medv ~ lstat, data = Boston)
+abline(lm_fit)
+```
+
+```{r}
+Boston %>%
+  ggplot(aes(x = lstat, y = medv)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+```{r}
+par(mfrow = c(2, 2))
+plot(lm_fit)
+```
+
+```{r}
+par(mfrow = c(1, 2))
+plot(predict(lm_fit), residuals(lm_fit))
+plot(predict(lm_fit), rstudent(lm_fit))
+```
+
+```{r}
+plot(hatvalues(lm_fit))
+which.max(hatvalues(lm_fit))
+```
+
+```{r}
+lm_fit2 <- lm(medv ~ lstat + age, data = Boston)
+summary(lm_fit2)
+```
+
+```{r}
+lm_fit3 <- lm(medv ~ ., data = Boston)
+summary(lm_fit3)
+```
+
+```{r}
+names(summary(lm_fit3))
+```
+
+```{r}
+library(car)
+vif(lm_fit3)
+```
+
+```{r}
+lm_fit4 <- lm(medv ~ . -age, data = Boston)
+summary(lm_fit4)
+```
+
+```{r}
+lm_fit4 <- lm(medv ~ . -age - indus, data = Boston)
+summary(lm_fit4)
+```
+
+
+```{r}
+AIC(lm_fit3, lm_fit4)
+BIC(lm_fit3, lm_fit4)
+```
+
+
+
+```{r}
+lm_fit5 <- lm(medv ~ lstat * age, data = Boston)
+summary(lm_fit5)
+```
+
+
+```{r}
+lm_fit6 <- lm(medv ~ lstat + I(lstat^2), data = Boston)
+summary(lm_fit6)
+```
+
+```{r}
+AIC(lm_fit4, lm_fit5, lm_fit6)
+```
+
+
+
+```{r}
+anova(lm_fit4, lm_fit6)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+plot(lm_fit6)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+plot(lm_fit4)
+```
+
+
+```{r}
+lm_fit7 <- lm(medv ~ poly(lstat, 5), data = Boston)
+summary(lm_fit7)
+```
+
+
+```{r}
+anova(lm_fit6, lm_fit7)
+```
+
+
+```{r}
+AIC(lm_fit6, lm_fit7)
+```
+
+
+```{r}
+par(mfrow = c(2, 2))
+plot(lm_fit7)
+```
+
+
+```{r}
+lm_fit8 <- lm(log(medv) ~ log(lstat), data = Boston)
+summary(lm_fit8)
+```
+
+```{r}
+AIC(lm_fit7, lm_fit8)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+plot(lm_fit8)
+```
+
+
+```{r}
+data("Carseats")
+names(Carseats)
+```
+
+```{r}
+lm_fit <- lm(
+  Sales ~ . + Income:Advertising + Price:Age, 
+  data = Carseats
+)
+summary(lm_fit)
+```
+
+
+```{r}
+contrasts(Carseats$ShelveLoc)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

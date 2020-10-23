@@ -1,0 +1,88 @@
+---
+title: "extrapolation of predictive modeling"
+output: html_notebook
+---
+
+* xgboost가 외삽에 약한 것을 확인
+* cubist는 선형 외삽이므로 외삽에 강함
+
+
+
+```{r}
+# Simple linear function:
+linear_function = function(x){10 * x}
+# Train dataset of 100 points:
+train_x = seq(1, 2000, by = 20)
+train_y = linear_function(train_x)
+# Test dataset of 100 points:
+test_x = seq(2000, 4000, by = 20)
+test_y = linear_function(test_x)
+train = data.frame(cbind(train_x, train_y))
+names(train) = c("x", "y")
+test = data.frame(cbind(test_x, test_y))
+names(test) = c("x", "y")
+
+# of course, linear regression does fine..._______________________________________________________
+linear_reg = lm(y ~ x, train)
+prediction_lreg = predict(linear_reg, test)
+plot(prediction_lreg, test$y) 
+# nice job, isnt it? After all, it is a line.
+
+# now lets see how Xgb does..._______________________________________________________
+library(xgboost)
+ set.seed(9)
+ xgb_reg = xgboost(data = as.matrix(train$x),
+            label = train$y, 
+            nrounds  = 1000,
+            objective   = "reg:linear",
+            eval_metric = "rmse",
+            nthread = 8,
+            missing=NA
+)
+prediction_xgb_reg = predict(xgb_reg, as.matrix(test$x))
+plot(prediction_xgb_reg, test$y) 
+ # what a disaster, isn't it?
+# xgb predictions, as a tree based model are bounded inside the learnt ranges during training !!!
+
+# if we want to make xgboost deal with linear problems we can change booster to "gblinear", it has some aditional nuts and bolts to touch if we want but that makes the model quite similar to plain linear regression. (Can try it changing that line of code if you want to confirm it).
+```
+
+```{r}
+train
+test
+```
+
+```{r}
+library(caret)
+
+cubistGrid <- expand.grid(.committees = c(1, seq(10, 100, by = 10)),
+                          .neighbors = c(0, 1, 3, 5, 7, 9))
+controlObject <- trainControl(method = "repeatedcv",
+                              repeats = 1,
+                              number = 10)
+set.seed(669)
+cbModel <- train(y ~ x,
+                 data = train,
+                 method = "cubist",
+                 tuneGrid = cubistGrid,
+                 trControl = controlObject)
+cbModel
+```
+
+
+```{r}
+plot(test$x, predict(cbModel, newdata = test))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,118 @@
+---
+title: "3. Evaluate your model with resampling"
+output: html_notebook
+---
+
+# 3. Evaluate your model with resampling
+
+```{r}
+library(modeldata)
+```
+
+```{r}
+data(cells, package = "modeldata")
+cells
+```
+
+```{r}
+cells %>%
+  count(class) %>%
+  mutate(prop = n / sum(n))
+```
+
+```{r}
+set.seed(123)
+cell_split <- initial_split(cells %>% select(-case), strata = class)
+cell_train <- training(cell_split)
+cell_test <- testing(cell_split)
+```
+
+```{r}
+nrow(cell_train)
+nrow(cell_train) / nrow(cells)
+```
+
+```{r}
+cell_train %>%
+  count(class) %>%
+  mutate(prop = n / sum(n))
+
+cell_test %>%
+  count(class) %>%
+  mutate(prop = n / sum(n))
+```
+
+```{r}
+rf_mod <-
+  rand_forest(trees = 1000) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+```
+
+```{r}
+set.seed(234)
+rf_fit <-
+  rf_mod %>%
+  fit(class ~ ., data = cell_train)
+```
+
+```{r}
+rf_training_pred <-
+  predict(rf_fit, cell_train) %>%
+  bind_cols(predict(rf_fit, cell_train, type = "prob")) %>%
+  bind_cols(cell_train %>% select(class))
+rf_training_pred
+```
+
+```{r}
+rf_training_pred %>% 
+  roc_auc(truth = class, .pred_PS)
+
+rf_training_pred %>%
+  accuracy(truth = class, .pred_class)
+```
+
+```{r}
+rf_testing_pred <-
+  predict(rf_fit, cell_test) %>%
+  bind_cols(predict(rf_fit, cell_test, type = "prob")) %>%
+  bind_cols(cell_test %>% select(class))
+rf_testing_pred
+```
+
+```{r}
+rf_testing_pred %>% 
+  roc_auc(truth = class, .pred_PS)
+
+rf_testing_pred %>% 
+  accuracy(truth = class, .pred_class)
+```
+
+```{r}
+set.seed(345)
+folds <- vfold_cv(cell_train, v = 10)
+folds
+```
+
+```{r}
+rf_wf <-
+  workflow() %>% 
+  add_model(rf_mod) %>% 
+  add_formula(class ~ .)
+
+set.seed(456)
+rf_fit_rs <- 
+  rf_wf %>% 
+  fit_resamples(folds)
+```
+
+```{r}
+collect_metrics(rf_fit_rs)
+```
+
+```{r}
+rf_testing_pred %>%                   # test set predictions
+  roc_auc(truth = class, .pred_PS)
+rf_testing_pred %>%                   # test set predictions
+  accuracy(truth = class, .pred_class)
+```

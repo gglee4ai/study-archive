@@ -1,0 +1,192 @@
+---
+title: "Chapter 3"
+output: html_notebook
+---
+
+
+# Chapter 3
+
+```{r}
+library(tidyverse)
+
+early_int <-
+  tibble(
+    id = rep(c(68, 70:72, 902, 904, 906, 908), each = 3),
+    age = rep(c(1, 1.5, 2), times = 8),
+    cog = c(
+      103, 119, 96, 106, 107, 96, 112, 86, 73, 100, 93, 87,
+      119, 93, 99, 112, 98, 79, 89, 66, 81, 117, 90, 76
+    ),
+    program = rep(1:0, each = 12)
+  )
+
+print(early_int)
+```
+
+```{r}
+early_int <- early_int %>% 
+  mutate(age_c = age - 1)
+early_int
+```
+
+```{r}
+load("input/early_int_sim.rda")
+```
+
+
+```{r}
+early_int %>% 
+  ggplot(aes(age, cog)) +
+  stat_smooth(method = "lm", se = FALSE) +
+  geom_point() +
+  facet_wrap(~id, ncol = 4) +
+  scale_x_continuous(breaks = c(1, 1.5, 2)) +
+  ylim(50, 150) +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+d <-
+  tibble(
+    id = "i",
+    age = c(1, 1.5, 2),
+    cog = c(95, 100, 135)
+  )
+d
+```
+
+```{r}
+fit3.1 <- lm(data = d, cog ~ age)
+summary(fit3.1)
+```
+
+```{r}
+f <- d %>% 
+  bind_cols(fitted = fitted(fit3.1))
+f
+```
+
+```{r}
+path <-
+  tibble(age = c(1, 2, 2),
+         cog = c(90, 90, 130))
+
+text <-
+  tibble(age   = c(1.2, 1.65, 2.15, 1.125, 2.075),
+         cog   = c(105, 101, 137, 75, 110),
+         label = c("epsilon[italic(i)][1]", "epsilon[italic(i)][2]", 
+                   "epsilon[italic(i)][3]", "pi[0][italic(i)]", "pi[1][italic(i)]"))
+
+arrow <-
+  tibble(age  = c(1.15, 1.6, 2.1, 1.1),
+         xend = c(1.01, 1.51, 2.01, 1.01),
+         cog  = c(103, 101, 137, 78),
+         yend = c(92.5, 105, 132.5, 89))
+
+# we're finally ready to plot!
+f %>% 
+  ggplot(aes(x = age, y = cog)) +
+  geom_point() +
+  # the main fitted trajectory
+  geom_line(aes(y = fitted)) +
+  # the thick dashed line bending upward at age == 2
+  geom_path(data = path,
+            linetype = 2, size = 1/2) +
+  # the thin dashed vertical lines extending from the data dots to the fitted line
+  geom_segment(aes(xend = age, y = cog, yend = fitted),
+               linetype = 3, size = 1/4) +
+  # the arrows
+  geom_segment(data = arrow,
+               aes(xend = xend, yend = yend),
+               arrow = arrow(length = unit(0.1, "cm")), size = 1/4) +
+  # the statistical notation
+  geom_text(data = text,
+            aes(label = label),
+            size = c(4, 4, 4, 5, 5), parse = T) +
+  # "1 year"
+  annotate(geom = "text",
+           x = 1.5, y = 86, label = "1 year") +
+  scale_x_continuous(breaks = c(1, 1.5, 2)) +
+  ylim(50, 150) +
+  theme(panel.grid = element_blank(), aspect.ratio = 1)
+```
+
+```{r}
+early_int_sim
+```
+```{r}
+early_int_sim %>% 
+  ggplot(aes(age, cog)) +
+  stat_smooth(
+    aes(group = id), 
+    method = "lm", se = FALSE, size = 1/6) +
+  stat_smooth(method = "lm", se = FALSE, size = 2) +
+  geom_point() +
+  scale_x_continuous(breaks = c(1, 1.5, 2)) +
+  ylim(50, 150) +
+  theme(panel.grid = element_blank())
+```
+
+```{r}
+by_id <- 
+  early_int_sim %>% 
+  mutate(age_c = age - 1) %>% 
+  group_by(id) %>% 
+  nest() %>% 
+  mutate(model = map(data, ~lm(data = ., cog ~ age_c)))
+```
+
+```{r}
+library(broom)
+by_id <- 
+  by_id %>% 
+  mutate(
+    tidy = map(model, tidy),
+    glance = map(model, glance)
+  )
+by_id
+```
+
+```{r}
+by_id %>% 
+  unnest(tidy) %>% 
+  filter(term == "(Intercept)") %>% 
+  pull(estimate) %>% 
+  stem()
+```
+
+```{r}
+by_id %>% 
+  unnest(tidy) %>% 
+  filter(term == "age_c") %>% 
+  pull(estimate) %>% 
+  stem()
+```
+
+```{r}
+by_id %>% 
+  unnest(glance) %>% 
+  pull(sigma) %>% 
+  stem(scale = 1)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

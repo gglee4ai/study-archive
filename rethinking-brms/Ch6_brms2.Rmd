@@ -1,0 +1,272 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+
+(
+  d <- 
+  tibble(species = c("afarensis", "africanus", "habilis", "boisei", "rudolfensis", "ergaster", "sapiens"), 
+         brain   = c(438, 452, 612, 521, 752, 871, 1350), 
+         mass    = c(37.0, 35.5, 34.5, 41.5, 55.5, 61.0, 53.5))
+  )
+```
+
+```{r}
+m6.1 <- lm(brain ~ mass, data = d)
+summary(m6.1)
+```
+
+```{r}
+1 - var(resid(m6.1)) / var(d$brain)
+```
+
+```{r}
+m6.2 <- lm(brain ~ mass + I(mass^2), data = d)
+summary(m6.2)
+```
+
+```{r}
+m6.3 <- lm( brain ~ mass + I(mass^2) + I(mass^3) , data=d )
+m6.4 <- lm( brain ~ mass + I(mass^2) + I(mass^3) + I(mass^4) ,
+    data=d )
+m6.5 <- lm( brain ~ mass + I(mass^2) + I(mass^3) + I(mass^4) +
+    I(mass^5) , data=d )
+m6.6 <- lm( brain ~ mass + I(mass^2) + I(mass^3) + I(mass^4) +
+    I(mass^5) + I(mass^6) , data=d )
+```
+
+```{r}
+#install.packages("rcartocolor", dependencies = T)
+library(rcartocolor)
+```
+
+```{r}
+carto_pal(7, "BurgYl")
+```
+
+```{r}
+display_carto_pal(7, "BurgYl")
+```
+
+
+```{r}
+library(ggrepel)
+d %>%
+  ggplot(aes(mass, brain, label = species)) +
+  geom_point() +
+  geom_text_repel(size = 3, family = "Courier", seed = 438)
+```
+
+```{r}
+library(broom)
+
+fits <-
+  tibble(
+    model = str_c("b6.", 1:6),
+    formula = c(
+      "brain ~ mass",
+      "brain ~ mass + I(mass^2)",
+      "brain ~ mass + I(mass^2) + I(mass^3)",
+      "brain ~ mass + I(mass^2) + I(mass^3) + I(mass^4)",
+      "brain ~ mass + I(mass^2) + I(mass^3) + I(mass^4) + I(mass^5)",
+      "brain ~ mass + I(mass^2) + I(mass^3) + I(mass^4) + I(mass^5) + I(mass^6)"
+    )
+  ) %>%
+  mutate(fit = map2(model, formula, function(model, formula) {
+    model <- lm(formula = formula, data = d)
+  })) %>%
+  mutate(
+    tidy = map(fit, tidy),
+    glance = map(fit, glance)
+  )
+
+fits
+```
+
+```{r}
+fits <- fits %>%
+  mutate(
+    r2 = map_dbl(glance, "r.squared"),
+    r2_text = round(r2, digits = 2) %>% as.character() %>% str_replace("0.", ".")
+  )
+```
+
+```{r}
+fits %>%
+  ggplot(aes(r2, formula, label = r2_text)) +
+  geom_text(size = 3.5) +
+  scale_x_continuous(expression(italic(R)^2), limits = 0:1, breaks = 0:1) +
+  ylab(NULL) +
+  theme_classic() +
+  theme(axis.text.y  = element_text(hjust = 0),
+        axis.ticks.y = element_blank(),
+        text         = element_text(family = "Courier"),
+        panel.background = element_rect(fill = alpha(carto_pal(7, "BurgYl")[3], 1/4)))
+```
+
+```{r}
+fits %>% 
+  unnest(tidy) %>% 
+  select(model, term:estimate) %>% 
+  mutate_if(is.double, round, digits = 1) %>% 
+  complete(term = distinct(., term), model) %>% 
+  spread(key = term, value = estimate) %>% 
+  select(model, `(Intercept)`, mass, everything())
+```
+
+```{r}
+p <-
+  d %>% 
+  ggplot(aes(x = mass, y = brain)) +
+  geom_point(color = carto_pal(7, "BurgYl")[7]) +
+  scale_x_continuous("body mass (kg)", limits = c(33, 62), expand = c(0, 0)) +
+  coord_cartesian(ylim = c(300, 1500)) +
+  ylab("brain volume (cc)") +
+  theme_classic() +
+  theme(text = element_text(family = "Courier"),
+        panel.background = element_rect(fill = alpha(carto_pal(7, "BurgYl")[3], 1/4)))
+```
+
+```{r}
+# linear
+p1 <- 
+  p +
+  stat_smooth(method = "lm", fullrange = TRUE, level = .89,  # note our rare use of 89% intervals
+              color = carto_pal(7, "BurgYl")[6], fill = carto_pal(7, "BurgYl")[6], 
+              size = 1/2, alpha = 1/3,
+              formula = y ~ x) +
+  ggtitle(NULL, subtitle = expression(paste(italic(R)^2, " = .49")))
+  
+# quadratic
+p2 <-
+  p + 
+  stat_smooth(method = "lm", fullrange = TRUE, level = .89,
+              color = carto_pal(7, "BurgYl")[6], fill = carto_pal(7, "BurgYl")[6], 
+              size = 1/2, alpha = 1/3,              
+              formula = y ~ poly(x, 2)) +
+  ggtitle(NULL, subtitle = expression(paste(italic(R)^2, " = .54")))
+
+# cubic
+p3 <-
+  p + 
+  stat_smooth(method = "lm", fullrange = TRUE, level = .89,
+              color = carto_pal(7, "BurgYl")[6], fill = carto_pal(7, "BurgYl")[6], 
+              size = 1/2, alpha = 1/3,              
+              formula = y ~ poly(x, 3)) +
+  ggtitle(NULL, subtitle = expression(paste(italic(R)^2, " = .68")))
+
+# fourth-order polynomial
+p4 <-
+  p + 
+  stat_smooth(method = "lm", fullrange = TRUE, level = .89,
+              color = carto_pal(7, "BurgYl")[6], fill = carto_pal(7, "BurgYl")[6], 
+              size = 1/2, alpha = 1/3,              
+              formula = y ~ poly(x, 4)) +
+  ggtitle(NULL, subtitle = expression(paste(italic(R)^2, " = .81")))
+
+# fifth-order polynomial
+p5 <-
+  p + 
+  stat_smooth(method = "lm", fullrange = TRUE, level = .89,
+              color = carto_pal(7, "BurgYl")[6], fill = carto_pal(7, "BurgYl")[6], 
+              size = 1/2, alpha = 1/3,              
+              formula = y ~ poly(x, 5)) +
+  # we're adjusting the y-axis range for this plot (and the next)
+  coord_cartesian(ylim = c(150, 1900)) +
+  ggtitle(NULL, subtitle = expression(paste(italic(R)^2, " = .99")))
+  
+# sixth-order polynomial
+p6 <-
+  p + 
+  # mark off 0 on the y-axis
+  geom_hline(yintercept = 0, color = carto_pal(7, "BurgYl")[2], linetype = 2) + 
+  stat_smooth(method = "lm", fullrange = TRUE, level = .89,
+              color = carto_pal(7, "BurgYl")[6], fill = carto_pal(7, "BurgYl")[6], 
+              size = 1/2, alpha = 1/3,              
+              formula = y ~ poly(x, 6)) +
+  coord_cartesian(ylim = c(-300, 1500)) +
+  ggtitle(NULL, subtitle = expression(paste(italic(R)^2, " = 1")))
+```
+
+```{r}
+library(gridExtra)
+
+grid.arrange(p1, p2, p3, p4, p5, p6, ncol = 3)
+```
+
+```{r}
+b6.7 <- lm(brain ~ 1, data = d)
+summary(b6.7)
+```
+
+```{r}
+glance(b6.7)
+```
+
+```{r}
+p +
+  stat_smooth(method = "lm", formula = y ~ 1, fullrange = TRUE, level = .89)
+```
+
+```{r}
+d %>% filter(row_number() != 2)
+```
+
+```{r}
+nd <- tibble(mass = c(30, 70))
+
+lines <- tibble(row = 1:7) %>%
+  mutate(p = map(row, function(row) {
+    my_fit <- d %>% filter(row_number() != row) %>% lm(formula = brain ~ mass)
+    predict(my_fit, newdata = nd) %>%
+      as_tibble() %>%
+      rename(brain = value) %>%
+      bind_cols(nd)
+    })
+  )
+```
+
+```{r}
+lines <- lines %>% unnest(p)
+```
+
+```{r}
+p + 
+  scale_x_continuous(expand = c(0, 0)) +
+  geom_line(data = lines, aes(x = mass, y = brain, group = row))
+```
+
+```{r}
+# because these lines will be very curvy, we'll need new data over many points of `mass`
+nd <- tibble(mass = seq(from = 30, to = 65, length.out = 200))
+
+# redifine the function
+make_lines <- function(row){
+  my_fit <-
+    d %>%
+    filter(row_number() != row) %>% 
+    lm(formula = brain ~ mass + I(mass^2) + I(mass^3) + I(mass^4) + I(mass^5) + I(mass^6))
+
+  predict(my_fit, nd) %>% 
+    as_tibble() %>% 
+    rename(brain = value) %>% 
+    bind_cols(nd)
+}
+
+# make our new tibble
+lines <-
+  tibble(row = 1:7) %>% 
+  mutate(p = map(row, make_lines)) %>% 
+  unnest(p)
+
+# plot!
+p +
+  geom_line(data = lines, 
+            aes(group = row),
+            color = carto_pal(7, "BurgYl")[6], alpha = 1/2, size = 1/2) +
+  coord_cartesian(ylim = -300:2000)
+```
+

@@ -1,0 +1,147 @@
+---
+title: "K-means clustering with tidy data principles"
+date: 2020-05-22
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r}
+set.seed(27)
+centers <- tibble(
+  cluster = factor(1:3),
+  num_points = c(100, 150, 50),
+  x1 = c(5, 0, -3),
+  x2 = c(-1, 1, -2)
+)
+centers
+```
+
+```{r}
+labelled_points <-
+  centers %>%
+  mutate(
+    x1 = map2(num_points, x1, rnorm),
+    x2 = map2(num_points, x2, rnorm)
+  ) %>%
+  select(-num_points) %>%
+  unnest(cols = c(x1, x2))
+labelled_points
+```
+
+```{r}
+ggplot(labelled_points, aes(x1, x2, color = cluster)) +
+  geom_point(alpha = 0.3)
+```
+
+```{r}
+points <-
+  labelled_points %>%
+  select(-cluster)
+points
+```
+
+
+```{r}
+kclust <- kmeans(points, centers = 3)
+kclust
+```
+
+```{r}
+summary(kclust)
+```
+
+
+```{r}
+augment(kclust, points)
+```
+
+```{r}
+tidy(kclust)
+```
+
+```{r}
+glance(kclust)
+```
+
+```{r}
+kclusts <-
+  tibble(k = 1:9) %>%
+  mutate(
+    kclust = map(k, ~kmeans(points, .x)),
+    tidied = map(kclust, tidy),
+    glanced = map(kclust, glance),
+    augmented = map(kclust, augment, points)
+  )
+kclusts
+```
+
+```{r}
+clusters <-
+  kclusts %>% 
+  unnest(cols = c(tidied))
+clusters
+```
+
+```{r}
+assignments <-
+  kclusts %>% 
+  unnest(cols = c(augmented))
+assignments
+```
+
+```{r}
+clusterings <-
+  kclusts %>%
+  unnest(cols = c(glanced))
+clusterings
+```
+
+```{r}
+p1 <- ggplot(assignments, aes(x = x1, y = x2)) +
+  geom_point(aes(color = .cluster), alpha = 0.5) +
+  facet_wrap(~ k)
+p1
+```
+
+```{r}
+p2 <- p1 + geom_point(data = clusters, size = 5, shape = "x")
+p2
+```
+
+```{r}
+ggplot(clusterings, aes(k, tot.withinss)) +
+  geom_line() +
+  geom_point()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

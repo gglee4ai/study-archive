@@ -1,0 +1,927 @@
+# 고객행동 예측분석 - R for Business Insight
+
+1. 고객행동 예측분석 기본 개념과 사례
+2. 예측분석과 데이터 마이닝 수행 프로세스 이해
+3. R을 활용한 탐색적 고객 데이터 분석
+4. 고객 데이터 확인 및 고객 행동 데이터 집계
+5. 데이터 테이블 결합
+6. 파생변수 생성 및 데이터 정제
+
+7. 의사결정나무를 활용한 모델 개발
+8. 랜덤포리스트를 활용한 모델 개발
+9. 모델 평가
+10. 군집분석 등 다른 기법과 결합 분석
+11. 고객행동 예측분석 결과 적용과 고려사항
+
+
+# 실습 목차
+A011 ::  R을 활용한 탐색적 고객 데이터 분석
+A012 ::  고객 데이터 확인 및 고객 행동 데이터 집계
+A013 ::  데이터 테이블 결합
+A014 ::  파생변수 생성 및 데이터 정제
+
+A021 ::  의사결정나무를 활용한 모델 개발
+A022 ::  랜덤포리스트를 활용한 모델 개발 
+A023 ::  모델 평가
+A024 ::  군집분석 등 다른 기법과 결합 분석
+
+
+
+#----[ A011 ] ::  R을 활용한 탐색적 고객 데이터 분석 --------
+
+
+#---- 분석용 데이터 : Game Log 데이터 --------
+
+# 데이터 불러오기
+
+#--- 데이터 중 30대 이상 여성 F 일부 삭제 ----
+# generation, device type, gender가 의미있도록 데이터 변경
+# 처음부터 데이터를 변경된 상태에서 사용 (--> userb)
+# userb에 있는 user만으로 dau도 처리 ( --> daub)
+
+userx01 <- tail(user[user$generation>=30 & user$gender== "F" 
+    & user$device_type=="iOS",]$user_id, 3000)
+length(userx01)
+
+userb <- user[!(user$user_id %in% userx01), ]
+daub <- dau[ dau$user_id %in% userb$user_id, ]
+setwd("C:/Users/xyxon/YONG/m17/")
+write.csv(userb, "userb.csv")
+write.csv(daub, "daub.csv")
+#---------------
+
+# setwd("C:/")
+# dau <- read.csv("daub.csv")
+# user <- read.csv("userb.csv")
+
+# [ 분석 데이터 : Game Log 데이터 ] - 파일 온라인링크
+#  [DS_PCBA] 예측적 고객행동 분석 :: http://blog.daum.net/revisioncrm/389
+
+# 사용자 기본 정보 데이터
+userb <- read.csv("http://cfile240.uf.daum.net/attach/996FE63359E42A3D1F20F7")
+# 로그인 이력 데이터 
+daub <- read.csv("http://cfile233.uf.daum.net/attach/9910C03359E42A3526C6C9")
+
+
+#---- 사용자 데이터 구조 파악 -------
+
+str(userb)
+nrow(userb)
+
+plot(userb$gender)
+table(userb$gender)
+table(userb$gender, userb$generation)
+plot(table(userb$gender, userb$generation))
+
+# 막대그래프
+# stacked
+barplot(table(userb$gender, userb$generation))
+# beside
+barplot(table(userb$gender, userb$generation), beside=T)
+
+plot(userb$device_type)
+
+daily_inst <- as.data.frame(table(as.character(userb$install_date)))
+names(daily_inst) <- c("date", "Freq")
+head(daily_inst)
+
+plot(daily_inst$Freq, type="l", main="Install Freq by date")
+
+# 성별로 비교해서 인스톨 건수를 플롯으로 비교해 보려면?
+
+daily_inst_gend <- as.data.frame(table(as.character(userb$install_date), userb$gender))
+names(daily_inst_gend) <- c("date", "gender", "Freq")
+
+plot(daily_inst_gend[daily_inst_gend$gender=="F",]$Freq, type="l", col="red",
+   main="installation count over time by gender [red: Female]")
+lines(daily_inst_gend[daily_inst_gend$gender=="M",]$Freq, type="l", col="blue")
+
+# 실습 :: 
+# 1 :: device type 별로 설치 건수 추이를 작성하라
+# 2 :: generation 별로 건수 추이를 작성하라
+
+# 성별 디바이스 유형(OS)별 분포
+barplot(table(userb$gender, userb$device_type), beside=T, 
+   legend.text=T)
+
+
+#----[ A012 ] ::  고객 데이터 확인 및 고객 행동 데이터 집계 --------
+
+#---- dau 데이터 특성/구조 파악 ----
+
+str(daub)
+nrow(daub)
+length(unique(daub$log_date))
+
+min(daub$log_date) # 에러 발생 --> 이유는?
+
+min(as.character(daub$log_date))
+max(as.character(daub$log_date))
+range(as.character(daub$log_date))
+
+# 일자별 건수 집계
+
+tblog_date <- as.data.frame(table(as.character(daub$log_date)))
+names(tblog_date) <- c("log_date", "Freq")
+head(tblog_date)
+# 일자순의 건수 분포
+plot(tblog_date$Freq, type="b")
+# 건수 크기 순의 건수 분포
+plot(sort(tblog_date$Freq), type="l", ylim=c(0, max(tblog_date$Freq)))
+
+# x축 라벨 변경 ( --> 일자 Date)
+# y축의 기준점을 0 부터로 변경
+plot(tblog_date$Freq,  xaxt='n', type="b", main="일자별 로그인 건수", 
+   ylim=c(0, max(tblog_date$Freq)*1.1), xlab="Date", cex=0.6)
+axis(1, at=1:nrow(tblog_date), labels=tblog_date$log_date)
+
+# app_name 컬럼 값 구성분포 확인
+length(unique(daub$app_name))
+unique(daub$app_name)
+table(daub$app_name)
+# 모두 같은 이름이기 (= game-01 만 존재) 때문에 의미 없는 컬럼
+
+# user_id 컬럼 확인
+length(unique(as.character(daub$user_id)))
+min(daub$user_id)
+max(daub$user_id) 
+# 건너 뛰고 부여된 번호들이 존재
+
+tbuser_id <- as.data.frame(table(as.character(daub$user_id)))
+names(tbuser_id) <- c("user_id", "Freq")
+rbind(head(tbuser_id), tail(tbuser_id))
+
+plot(tbuser_id[order(as.numeric(tbuser_id$user_id)), ]$Freq, type="l", main="Freq by user_id")
+# Alternatively
+plot(as.numeric(tbuser_id$user_id), tbuser_id$Freq, type="l")
+
+# user_id가 순서대로 부여된 영향이 Freq에 나타남
+# = 가입기간이 짧으면 누적방문건수가 많기 어려움
+
+plot(sort(tbuser_id$Freq), type="l", ylim=c(0, max(tbuser_id$Freq)))
+
+user_date <- as.data.frame(table(daub$user_id, daub$log_date))
+# 동일한 일자가 두 번이상 로그인 날짜로 기록된 건이 있는지 확인
+nrow(head(user_date[user_date$Freq>1,]))
+
+
+
+#----[ A013 ] :: 데이터 테이블 결합 --------------------
+
+#---- 예측분석을 위한 테이블 생성 ----
+
+# 참고 :: 예측분석 수행절차(예시)
+# ....................
+# 1. 무엇을 예측할 것인지 정의 (다음분기 해지가능성)
+# 1.1 기간 설정 (언제 기간의 데이터로 언제를 예측?)
+# 2. 대상의 범위 설정 (예: 휴면상태가 아닌 개인 고객 중 모바일 채널 이용 경험 고객)
+# 3. 필요한 데이터 확보
+# 4. 확보한 데이터에서 대상자 추출(예: 대상자 학번)
+# 5. 변수(X)를 만들 데이터 분리
+# 6. 타겟(Y)을 만들 데이터 분리
+
+# (중간중간) 탐색적으로 데이터 구조, 분포, 관계 파악
+#  === 탐색적 데이터 분석 (EDA)
+
+# 7. 변수 설계 (아마도 여러 개. 100개이상???)
+# 8. 변수 생성 (하나씩 하나씩. NA처리, 정제 포함)
+# 9. 생성된 변수와 대상자 리스트 결합
+# 10. 타겟 생성
+# 11. 타겟을 생성된 변수들의 Set와 결합
+
+# 12. 모델 개발 (변수 선택, 추가변수 반영 포함)
+# 13. 모델 평가 Assessment (잘맞는 것인지)
+#-------------
+
+# 일자별 건수 확인
+head(tblog_date[order(tblog_date$log_date),], 10)
+tail(tblog_date[order(tblog_date$log_date),], 10)
+
+# 방향: 미래에 게임을 할 것인지 예측하는 모델을 생성
+# 최종 7일 즉 1주일간의 데이터는 분리 - 예측 대상으로 사용 
+# 최종 7일을 제외한 일자 리스트 추출
+ulog0 <- head(tblog_date[order(tblog_date$log_date),], nrow(tblog_date)-7)
+
+ulog0$Freq <- 0 # 기간이 달라 의미없으므로 임시 생략 조치
+str(daub)
+# X 컬럼은 필요 없음
+daub <- daub[,2:4]
+str(daub)
+
+# 로그인 이력에서 최종 7일을 제외한 일자 해당 내역만 추출
+daup <- daub[daub$log_date %in% ulog0$log_date,c(1,3)]
+
+
+#[참고] %in% 연산자 활용 예제
+# a <- c("red", "green", "blue")
+# a[a %in% c("red", "green")]
+
+uuserp <- as.data.frame(unique(daup$user_id))
+# 컬럼 하나 뿐인 string vector 이지만 df로
+# 나머지 컬럼들을 생성하는대로 여기에 결합할 것이기 때문
+names(uuserp)[1] <- "user_id"
+
+# user별로 이용 일수를 집계
+# user_days <- aggregate(log_date ~ user_id, data = daup, function(x) length(x))
+
+user_days <- aggregate(log_date ~ user_id, data = daup, length)
+head(user_days)
+names(user_days)[2] <- "log_days"
+plot(user_days$user_id, user_days$log_days)
+# 의미는? 최근 가입한 사용자가 누적 로그인 일수가 더 크다?
+
+# 최초, 최근 이용일 날짜를 산출
+user_initial <- aggregate(log_date ~ user_id, data = daup, function(x) min(as.character(x)))
+head(user_initial)
+names(user_initial)[2] <- "log_init"
+
+user_recent <- aggregate(log_date ~ user_id, data = daup, function(x) max(as.character(x)))
+names(user_recent)[2] <- "log_rcnt"
+
+# 하나의 데이터 프레임으로 결합
+uuserp1 <- merge(uuserp, user_days, by="user_id", all.x=T)
+uuserp1 <- merge(uuserp1, user_initial, by="user_id", all.x=T)
+uuserp1 <- merge(uuserp1, user_recent, by="user_id", all.x=T)
+head(uuserp1)
+
+# initial과 recent에 대한 기간일수 산출
+lastdayp <- max(as.character(daup$log_date))
+uuserp1$use_length <- as.numeric(as.Date(lastdayp, format="%Y-%m-%d")- as.Date(uuserp1$log_init, format="%Y-%m-%d") + 1)
+uuserp1$recency <- as.numeric(as.Date(lastdayp, format="%Y-%m-%d")- as.Date(uuserp1$log_rcnt, format="%Y-%m-%d") + 1)
+plot(uuserp1$recency, uuserp1$use_length)
+# 분석기간 중 최초 일자는 마지막 이용 일자보다는 이전인 관계
+
+plot(jitter(uuserp1$recency), jitter(uuserp1$use_length))
+
+plot(uuserp1$log_days, uuserp1$recency)
+
+# 밀도를 통해 크게  skew된 관계임을 파악
+plot(jitter(uuserp1$log_days), jitter(uuserp1$recency))
+
+
+
+
+#---- 미래 기간 :: 종속변수 생성 ------
+
+dauf <- daub[!(daub$log_date %in% ulog0$log_date), c(1,3)]
+uuserf <- as.data.frame(unique(dauf$user_id))
+names(uuserf)[1] <- "user_id"
+
+# user별 로그인 일수 계산
+user_daysf <- aggregate(log_date ~ user_id, data = dauf, length)
+head(user_daysf)
+names(user_daysf)[2] <- "log_daysf"
+
+# 과거(X) 와 미래(Y) 데이터 결합
+uuserp1 <- merge(uuserp1, user_daysf, by="user_id", all.x=T)
+
+# NA 값을 모두 0으로 대체
+uuserp1$log_daysf[is.na(uuserp1$log_daysf)] <- 0
+# 1보다 큰 값을 모두 1로 변환 - binary 형식의 종속변수 후보
+uuserp1$loggedf <- ifelse(uuserp1$log_daysf>=1, 1, 0) 
+
+# 미래 사용일수에 대한 초기 회귀분석 실시
+lm1 <- lm(log_daysf~log_days + use_length + recency , data=uuserp1)
+summary(lm1)
+
+# 회귀분석에서 주효한 변수를 추출해서 시각적 확인
+# dark 색상 쪽이 로그인일수가 많은 사용자
+plot(jitter(uuserp1$log_days), jitter(uuserp1$use_length), 
+  col=grey(1- uuserp1$log_daysf/max(uuserp1$log_daysf)),
+  pch=19, cex=0.6)
+
+#--- 참고: 모노톤의 명암 기준값 확인
+# bpdata <- 5:15
+# names(bpdata) <- (0:10)/10
+# barplot(bpdata, col=grey(names(bpdata)))
+
+
+
+#----[ A014 ] ::  파생변수 생성 및 데이터 정제 ----------
+# Feature Engineering
+
+# 평균적인 이용주기 파생변수 생성
+uuserp1$log_cycle <- uuserp1$use_length / uuserp1$log_days
+
+plot(jitter(uuserp1$log_cycle), jitter(uuserp1$use_length), 
+  col=grey(1- uuserp1$log_daysf/max(uuserp1$log_daysf)),
+  pch=19, cex=0.6, xlim=c(0,30))
+
+plot(jitter(uuserp1$log_cycle), jitter(uuserp1$use_length), 
+  col=rgb( .5, (1- uuserp1$log_daysf/max(uuserp1$log_daysf)), .5, alpha=.6),
+  pch=19, cex=0.6)
+
+plot(jitter(uuserp1$log_cycle), jitter(uuserp1$use_length), 
+  col=rgb( .5, (1- uuserp1$log_daysf/max(uuserp1$log_daysf)), .5, alpha=.6),
+  pch=19, cex=0.6, ylim=c(0,30))
+
+plot(jitter(uuserp1$log_cycle), jitter(uuserp1$recency), 
+  col=rgb( .3, (1- uuserp1$log_daysf/max(uuserp1$log_daysf)), .7, alpha=.5),
+  pch=19, cex=0.5)
+
+# 이용자 기본 개인정보 demographics 구조 파악
+str(userb)
+length(unique(userb$user_id))
+length(unique(userb$user_id, userb$install_date))
+
+# user별 install date 확인
+user_instfrq <- aggregate(install_date ~ user_id, data = userb, length)
+head(user_instfrq)
+names(user_instfrq)[2] <- "instfrq"
+
+plot(user_instfrq$instfrq)
+range(user_instfrq$instfrq)
+
+# user 항목 결합
+uuserp1 <- merge(uuserp1, userb, by="user_id", all.x=T)
+
+# inst_age == 설치후 몇일이나 되었는지
+uuserp1$inst_age <- as.numeric(as.Date(lastdayp, format="%Y-%m-%d")- as.Date(uuserp1$install_date, format="%Y-%m-%d") + 1)
+plot(uuserp1$inst_age)
+range(uuserp1$inst_age)
+
+names(userb)
+
+names(uuserp1)
+# 필요없는 컬럼 X 제거
+uuserp1 <- uuserp1[,!(names(uuserp1) %in% c("X"))]
+head(uuserp1)
+
+#---- 완성된 데이터 셋 분포 확인 ---------
+mean(uuserp1$log_daysf)
+
+# 가설: 과거에 많이 이용했다면 미래 이용도 많을 것
+plot(uuserp1$log_daysf, uuserp1$log_days)
+plot(uuserp1$log_days, uuserp1$log_daysf)
+
+plot(uuserp1$log_days, jitter(uuserp1$log_daysf))
+plot(jitter(uuserp1$log_daysf)~uuserp1$log_days)
+plot(jitter(uuserp1$log_daysf)~ jitter(uuserp1$log_days))
+
+plot(uuserp1$log_days, uuserp1$log_daysf)
+# 겹침으로 인해 분포의 의미 파악 불가능
+
+plot(jitter(uuserp1$log_days), jitter(uuserp1$log_daysf))
+abline(lm(uuserp1$log_daysf~uuserp1$log_days), col="red",
+   lwd=2)
+cor(uuserp1$log_daysf, uuserp1$log_days)
+
+# 폴리노미얼 추세선 ( locally-weighted polynomial regression ) 추가
+# scatterplot Smoothing을 위한 함수 LOWESS
+lines(lowess(uuserp1$log_days, uuserp1$log_daysf), col="blue", lwd=2) 
+
+boxplot(uuserp1$log_days~ uuserp1$log_daysf)
+boxplot(uuserp1$log_daysf~uuserp1$log_days)
+boxplot(uuserp1$log_daysf~floor(uuserp1$log_days/10), 
+  xlab="10일단위 이용일수 - 독립변수기간", 
+  ylab="1일단위 이용일수 - 종속변수기간")
+# floor :: 소수점 이하 버림
+grid()
+
+
+#--- 데이터 처리 >> 변수생성 연습 --------
+
+#[1]  8월중 마지막 날짜는?
+#[2]  9월중 마지막 날짜는?
+#[3] 전체 user중에서 10번째로 많은 방문일수를 가진 
+#   user의 id는?
+#[4] 여성의 숫자는?
+#[5] 여성이면서 10대는 몇명인가?
+#[6] 여성중 가장 마지막 날 사용한 사람들 명단은?
+#[7] 연령대별 인원수는?
+#[8] 연령대별 평균게임일수는?
+#[9] 50대 여성중 가장 처음 한명이라도 게임을 한 날과
+#   가장 마지막으로 게임을 한 날의 간격은?
+
+#[1]  8월중 마지막 날짜는?
+udate <- as.character(unique(daub$log_date))
+udatedf <- as.data.frame(udate)
+udatedf$month <- substr(udate, 6, 7)
+udatedf1 <- udatedf[udatedf$month=="08",]
+head(udatedf1) ; tail(udatedf1)
+tail(sort(udatedf1$udate),1)
+udatedf1[order(udatedf1$udate), ][nrow(udatedf1),1]
+
+#[2]  9월중 마지막 날짜는?
+
+
+#[3] 전체 user중에서 10번째로 많은 방문일수를 가진 
+#   user의 id는?
+days1 <- aggregate(log_date ~ user_id , data = daub, length)
+
+daub_u <- unique(daub)
+days1.1 <- aggregate(log_date ~ user_id , data = daub_u, length)
+
+days2 <- aggregate(log_date ~ user_id , data = daub, function(x) {length(unique(x))})
+
+head(days1[order(-days1$log_date), ], 10)[10,1]
+tail(head(days1[order(-days1$log_date), ], 10),1)[,1]
+tail(head(days1[order(-days1$log_date), ], 10),1)$user_id
+
+#[4] 여성의 숫자는?
+nrow(userb[userb$gender=="F",])
+length(userb$gender[userb$gender=="F"])
+
+#[5] 여성이면서 10대는 몇명인가?
+nrow(userb[userb$gender=="F" & userb$generation==10,])
+
+#[6] 여성중 가장 마지막 날 사용한 사람들 명단은?
+#[7] 연령대별 인원수는?
+table(userb$generation)
+u0 <- aggregate(.~generation, data=userb, length)
+
+#[8] 연령대별 평균게임일수는?
+u1 <- userb[,c("user_id", "generation")]
+u2 <- merge(daub, u1, by="user_id")
+u3 <- aggregate(.~generation, data=u2, mean)
+u4 <- merge(u0, u3, by="generation")
+plot(u4$generation, u4$log_date, type="b", ylim=c(0,max(u4$log_date)*1.05))
+
+bpdata <- u4$log_date
+names(bpdata) <- u4$generation
+barplot(bpdata)
+grid(nx=0, ny=6, col="lightblue") # 보조선 추가
+
+#[9] 50대 여성중 가장 처음 한명이라도 게임을 한 날과
+#   가장 마지막으로 한명이라도 게임을 한 날의 간격은?
+
+
+#------- 선형회귀분석 -----------
+# demographic 변수와 추가 파생변수 반영
+
+lm2 <- lm(log_daysf~log_days + use_length + recency + gender + generation + device_type + inst_age + log_cycle, data=uuserp1)
+summary(lm2)
+
+
+#--- EDA device_type 의미 파악 :: EDA ----
+
+boxplot(uuserp1$log_daysf~ uuserp1$device_type)
+grid(10)
+
+boxplot(uuserp1$log_daysf~ uuserp1$device_type, ylim=c(0,2))
+grid(10)
+
+# 디바이스 유형별 이용자 비율
+nrow(uuserp1[ uuserp1$log_daysf>=1 & uuserp1$device_type=="Android",]) / nrow(uuserp1[  uuserp1$device_type=="Android",])
+nrow(uuserp1[ uuserp1$log_daysf>=1 & uuserp1$device_type=="iOS",]) / nrow(uuserp1[  uuserp1$device_type=="iOS",])
+
+# 디바이스 유형별 평균값
+mean(uuserp1[ uuserp1$device_type=="Android",]$log_daysf) 
+mean(uuserp1[ uuserp1$device_type=="iOS",]$log_daysf) 
+
+plot(sort(uuserp1[ uuserp1$device_type=="iOS",]$log_daysf), type="l")
+lines(sort(uuserp1[ uuserp1$device_type=="Android",]$log_daysf), col="red", lty=2)
+
+# sort 대신 order 함수 적용
+tmp <- uuserp1[order(uuserp1$log_daysf),]
+plot(tmp[ tmp$device_type=="iOS",]$log_daysf, type="l")
+lines(tmp[ tmp$device_type=="Android",]$log_daysf,  col="red", lty=2)
+
+# 미래 로그인 일수 분포상에 디바이스 유형 구별 시각화
+plot(jitter(jitter(tmp$log_daysf)), pch=19, cex=0.7,
+  col=ifelse(tmp$device_type=="Android","blue","red"))
+
+plot(table(tmp$log_daysf, tmp$device_type)[,1] *100
+    / (table(tmp$log_daysf, tmp$device_type)[,1] 
+      + table(tmp$log_daysf, tmp$device_type)[,2]), 
+  type="b", main="Proportion of Android by log_daysf" ,
+  xaxt='n' , xlab="Days", ylab="%")
+axis(1, at=1:8, labels=0:7)
+
+log_daysf <- c(0:7)
+andr_cnt <- table(tmp$log_daysf, tmp$device_type)[,1]
+all_cnt <- table(tmp$log_daysf, tmp$device_type)[,1] + table(tmp$log_daysf, tmp$device_type)[,2]
+log_daysf_dvc_type <- data.frame(log_daysf, andr_cnt, all_cnt)
+log_daysf_dvc_type$andr_r <- log_daysf_dvc_type$andr_cnt / log_daysf_dvc_type$all_cnt
+
+# 미래이용 일수별 구성비와 안드로이드 비율
+plot(log_daysf_dvc_type$log_daysf, log_daysf_dvc_type$andr_r *100, 
+   type="b", 
+   main="미래이용 일수별 구성비와 안드로이드 비율")
+points(log_daysf_dvc_type$log_daysf, log_daysf_dvc_type$all_cnt*100 /
+  sum(log_daysf_dvc_type$all_cnt), type="l", lty=2)
+
+
+
+#----[ A021 ] ::  ::  의사결정나무를 활용한 모델 개발 --------
+
+# NA 존재여부 확인
+anyNA(uuserp2)
+
+# 트리나 랜덤포리스트를 위한 명목형 변수들은 factor 형식으로 변환 필요
+
+require(party)
+t1 <- ctree(log_daysf~log_days + recency , data=uuserp1, 
+    controls = ctree_control(maxdepth = 4, minbucket=10))
+plot(t1)
+
+t1 <- ctree(log_daysf~log_days + use_length + recency + gender + generation +
+    device_type + inst_age , data=uuserp1, 
+    controls = ctree_control(maxdepth = 3, minbucket=100))
+plot(t1)
+
+plot(jitter(uuserp1$log_days), jitter(uuserp1$recency), 
+  col=rgb( .3, (1- uuserp1$log_daysf/max(uuserp1$log_daysf)), .7, alpha=.5),
+  pch=19, cex=0.5)
+
+#---- 의사결정나무 모델의 세부정보 검토
+
+t1 # tree rule 출력
+# weights --> observation count
+# 집단의 값 (평균, 중위수 ... ) 
+
+# 값대신 노드를 predict
+pred <- predict(t1, data=uuserp1, type="node")
+uuserp1_y <- uuserp1[,c("user_id","log_daysf")]
+uuserp1_y$node <- pred
+med_log_daysf_by_node <- aggregate(log_daysf ~ node, data = uuserp1_y, median)
+mean_log_daysf_by_node <- aggregate(log_daysf ~ node, data = uuserp1_y, mean)
+cnt_log_daysf_by_node <- aggregate(log_daysf ~ node, data = uuserp1_y, length)
+
+plot(cnt_log_daysf_by_node$log_daysf, med_log_daysf_by_node$log_daysf,
+  , main="트리 노드별 observation count와 log_daysf 중위수")
+text(cnt_log_daysf_by_node$log_daysf, 
+   med_log_daysf_by_node$log_daysf, labels=cnt_log_daysf_by_node$node,
+   pos=2)
+
+
+# binary 타겟 변수 (하루라도 로그인이 있었는지 여부) 사용하는 경우
+t1 <- ctree(loggedf~log_days + use_length + recency + gender + generation + device_type + inst_age , data=uuserp1, controls = ctree_control(maxdepth = 3, minbucket=100))
+plot(t1)
+
+plot(jitter(uuserp1$log_days), jitter(uuserp1$recency), 
+  col=rgb( .3, uuserp1$loggedf, .7, alpha=.3),
+  pch=19, cex=0.5)
+
+#  시각적으로 충분히 패턴을 확인하기 어렵다면
+#  파생변수 생성을 통해 확인 필요 
+
+
+
+#----[ A022 ] ::  ::  랜덤포리스트를 활용한 모델 개발 --------
+
+require(randomForest)
+rf1 <- randomForest(log_daysf~ log_days + use_length + recency + gender +    
+  generation + device_type + inst_age, data=uuserp1,
+  do.trace=20, ntree=200, importance=T)
+plot(rf1)
+varImpPlot(rf1)
+rf1
+
+# 가장 중요한 변수를 하나 제외 시켜본다면
+rf1 <- randomForest(log_daysf ~ log_days + use_length + gender + generation 
+  + device_type + inst_age, data=uuserp1,
+  do.trace=20, ntree=200, importance=T)
+plot(rf1)
+varImpPlot(rf1)
+rf1
+
+# binary 타겟 사용 -- 타겟 변수를 숫자형으로 설정한 경우
+rf1 <- randomForest(loggedf~ log_days + use_length + recency + gender +    
+  generation + device_type + inst_age, data=uuserp1,
+  do.trace=20, ntree=200, importance=T)
+plot(rf1)
+varImpPlot(rf1)
+rf1
+
+# binary 타겟 사용 -- 타겟 변수가 명목형 설정일 경우
+uuserp2 <- uuserp1
+uuserp2$loggedf <- as.factor(uuserp2$loggedf)
+rf1 <- randomForest(loggedf~ log_days + use_length + recency + gender +    
+  generation + device_type + inst_age, data=uuserp2,
+  do.trace=20, ntree=2000, importance=T)
+plot(rf1)
+varImpPlot(rf1)
+rf1
+
+# OOB에러 : 전체 ; class별 에러
+# Confusion matrix 확인 필요
+# trace에서 1, 2는 각각 1번, 2번 클래스에 대한 오차율
+
+
+varNames <- names(uuserp2)
+varNames <- varNames[!varNames %in% 
+   c("loggedf", "log_daysf", "user_id", "install_date", "app_name", "log_init", "log_rcnt")]
+# 불필요한 컬럼을 제외한 변수명을 벡터로 저장. 예측 대상 변수(Y) 해당 변수들 제외
+
+# add + sign between exploratory variables
+# formula 데이터 타입으로 모델의 식 (Y와 X의 리스트로 구성) 정의
+varNames1 <- paste(varNames, collapse = "+")
+form1 <- as.formula(paste("loggedf", varNames1, sep = " ~ "))
+
+print(form1)
+
+
+# formula 형식의 변수정의 적용
+rf1 <- randomForest(form1, data=uuserp2,
+  do.trace=25, ntree=200, importance=T)
+plot(rf1)
+varImpPlot(rf1)
+rf1
+
+# 예측값 생성 - Scoring
+
+fitted.results.rf <- predict(rf1, newdata=uuserp2, type="prob")
+head(fitted.results.rf)
+
+# type="prob" 옵션은 타겟이 클래스일 경우에만 의미있음
+
+# 의사결정나무 경우
+fitted.results.dt <- predict(t1, newdata=uuserp2, type="prob")
+head(fitted.results.dt)
+
+
+#----[ A023 ] ::  모델 평가 ----------------
+
+#-------[모델 평가 ] 실제값과 예측값 관계 확인 --------
+
+plot(jitter(uuserp2$log_daysf), jitter(predict(t1, data=uuserp2)),
+  main="Predicted Vs. Actual")
+# 실제값과 예측오차값 관계 확인
+aa <- uuserp1$log_daysf-predict(t1, data=uuserp2)
+# 선형회귀 추세선 추가
+abline(lm(aa~uuserp2$log_daysf), col="red")
+# 폴리노미얼 추세선 추가
+lines(lowess(uuserp2$log_daysf, aa), col="blue")
+
+plot(sort(uuserp2$log_daysf-predict(t1, data=uuserp2)), 
+  main="Residual distribution", ylab="Residual")
+abline(0,0) # 기준선 추가
+
+uuserp2$predicted <- predict(t1, data=uuserp2)
+plot(jitter(uuserp2$log_daysf), jitter(uuserp2$log_daysf-uuserp2$predicted))
+abline(0,1, lty=2) # 대각선 추가
+# 전체적으로 음의 방향으로 오차 발생
+
+plot(jitter(uuserp2$predicted), 
+  jitter(jitter(uuserp2$log_daysf)-jitter(uuserp2$predicted)), 
+  main="Residual Vs. Fitted")
+
+
+# 모델의 예측 결과를 저장 (target : log_daysf )
+uuserp2$actual <- uuserp2$log_daysf
+uuserp2$predicted_dt <- predict(t1, data=uuserp2)[,1]
+uuserp2$predicted_rf <- predict(rf1, data=uuserp2)
+
+#---- 모델별 평균 절대 오차 계산 ----
+
+mean(abs(uuserp2$actual - uuserp2$predicted_dt)) # DT모델 오차
+mean(abs(uuserp2$actual - uuserp2$predicted_rf)) # 랜덤포리스트모델 오차
+
+
+#------- [모델 유의성 검증]-----------------
+
+# 데이터 분할 partitioning
+# data partitioning - using random sampling
+smp_size <- floor(0.8 * nrow(uuserp2))
+
+# set the seed to make your partition reproducible
+set.seed(123)
+train_ind <- sample(seq_len(nrow(uuserp2)), size = smp_size)
+uuserp2train <- uuserp2[train_ind, ]
+uuserp2test <- uuserp2[-train_ind, ]
+
+nrow(uuserp2train) ; nrow(uuserp2test)
+
+barplot(c(nrow(uuserp2train), nrow(uuserp2test) ))
+axis(side=1, at=1:2, labels=c("Train", "Test"))
+
+par(mfrow=c(1,1)) # 화면에 하나의 플롯만 생성되도록 지정
+
+
+#--- 트리 예측력 확인과 ROC 챠트 생성 -------
+
+# loggedf binary target 예측
+t2 <- ctree(loggedf ~ log_days + use_length + recency + gender + generation +
+    device_type + inst_age , data=uuserp2train, 
+    controls = ctree_control(maxdepth = 4, minbucket=100))
+# 트리 깊이를 4 까지로 설정
+plot(t2)
+
+fitted.results <- predict(t2, newdata=uuserp2test, type="response")
+# Confusion matrix 생성
+addmargins(table(fitted.results, uuserp2test$loggedf))
+misClasificError <- mean(fitted.results != uuserp2test$loggedf)
+print(paste('Accuracy', as.integer((1-misClasificError)*10000)/100, '%' ))
+
+fitted.results <- predict(t2, newdata=uuserp2test, type="prob")
+# 트리를 사용한 예측결과(리스트)에서 클래스별 확률값을 추출
+trnt1 <- unlist(fitted.results)
+trnt2<- data.frame(flg = rep(1:2,nrow(uuserp2test)), trnt1 = trnt1)
+prob_y <- trnt2[trnt2$flg==2,]$trnt1
+
+# 예측된 확률값의 분포 확인
+plot(sort(prob_y))
+
+# ROC 챠트 작성
+# Receiver operating characteristic == ROC
+# binary classifier 진단을 위한 도구
+# install.packages("ROCR")
+require(ROCR)
+
+pr <- prediction(prob_y, ifelse(uuserp2test$loggedf=="1",1,0))
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf)
+plot(prf, colorize=T)
+abline(a=0,b=1,lwd=1,lty=2,col="gray")
+# abline(a=0,b=1,lwd=1,lty=2,col="grey") # grey, gray 모두 사용
+
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]]
+auc  # Ratio of Area under the ROC curve
+
+
+#----[ randomForest ] 모델 평가 ---------
+
+require(randomForest)
+rf2 <- randomForest(loggedf ~ log_days + use_length + recency + gender 
+  + generation + device_type + inst_age, data=uuserp2train, 
+    do.trace=50, ntree=1000, importance=T)
+plot(rf2)
+varImpPlot(rf2)
+rf2
+
+# 결과에 출력된 Confusion matrix 확인 필요
+# trace에서 1, 2는 각각 1번, 2번 (factor level) 클래스에 대한 오차율
+
+fitted.results <- predict(rf2, newdata=uuserp2test, type="prob")
+head(fitted.results)
+
+# take prob of yes
+pr <- prediction(fitted.results[,2], ifelse(uuserp2test$loggedf=="1",1,0))
+# ROC 챠트 생성
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf, colorize=T, main="ROC of RF")
+abline(a=0,b=1,lwd=1,lty=2,col="gray")
+
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]]
+auc # area under curve - 1에 가까울수록 바람직함. 0.5 이상의 값을 가짐
+
+# Lift 챠트 작성
+prf <- performance(pr,"lift","rpp")
+plot(prf, main="lift curve", colorize=T)
+
+# Lift 챠트 생성과정 확인
+str(prf)
+plot(prf@x.values[[1]], prf@y.values[[1]] )
+abline(v=0.1, lty=2) # 상위 10% 지점. 통상 3 이상은 Lift가 되어야 한다고
+abline(h=3, lty=2)
+
+
+# Gains Chart 작성
+# gains table == cumulative response chart
+# install.packages("gains")
+library(gains)
+gains.cross <- gains(ifelse(uuserp2test$loggedf=="1",1,0), fitted.results[,2],
+      groups=50)
+str(gains.cross)
+# 스코어(예측확률)와 실제확률간의 차이 확인
+# plot(gains.cross$mean.resp, gains.cross$mean.prediction)
+# abline(0,1)
+
+print(gains.cross)
+plot(gains.cross)
+
+plot(gains.cross$depth, gains.cross$cume.pct.of.total*100, main="Cumulative Total %Response", 
+  ylim=c(0,100))
+abline(v=10, lty=2, col="gray")
+abline(v=20, lty=2, col="gray")
+abline(a=0,b=1, lty=2, col="gray")
+
+fitted.results <- predict(rf2, newdata=uuserp2test, type="response")
+table(fitted.results, ifelse(uuserp2test$loggedf=="1",1,0))
+misClasificError <- mean(fitted.results != uuserp2test$loggedf)
+print(paste('Accuracy', as.integer((1-misClasificError)*10000)/100, '%' ))
+
+
+
+#--- 파생변수추가 : 최근 활동 기간별 변수 생성 -------
+
+# 최종 7일 즉 1주일간의 데이터(미래) 이전의 14일(2주) 행동을 집계
+
+ulog1 <- tail(head(tblog_date[order(tblog_date$log_date),], nrow(tblog_date)-7), 14)
+ulog1$Freq <- 0 # 임시 생략 조치 - 혼동 방지
+daup1 <- daub[daub$log_date %in% ulog1$log_date,c(1,3)]
+
+# user별로 최근2주간 이용 일수를 집계
+user_days1 <- aggregate(log_date ~ user_id, data = daup1, function(x) length(x))
+names(user_days1)[2] <- "log_days_r2w"
+head(user_days1)
+plot(user_days1$user_id, user_days1$log_days_r2w)
+uuserp2 <- merge(uuserp2, user_days1, by="user_id", all.x=T)
+uuserp2$log_days_r2w[is.na(uuserp2$log_days_r2w)] <- 0 # NA값 0으로 대체
+
+# 최종 7일 즉 1주일간의 데이터(미래) 이전의 7일(1주) 행동을 집계
+
+ulog2 <- tail(head(tblog_date[order(tblog_date$log_date),], nrow(tblog_date)-7), 7)
+ulog2$Freq <- 0 # 임시 생략 조치 - 혼동 방지
+daup2 <- daub[daub$log_date %in% ulog2$log_date,c(1,3)]
+
+# user별로 최근 1주간 이용 일수를 집계
+user_days2 <- aggregate(log_date ~ user_id, data = daup2, function(x) length(x))
+names(user_days2)[2] <- "log_days_r1w"
+head(user_days2)
+plot(user_days2$user_id, user_days2$log_days_r1w)
+uuserp2 <- merge(uuserp2, user_days2, by="user_id", all.x=T)
+uuserp2$log_days_r1w[is.na(uuserp2$log_days_r1w)] <- 0 # NA값 0으로 대체
+
+# 최종 7일 즉 1주일간의 데이터(미래) 이전의 3일 행동을 집계
+
+ulog3 <- tail(head(tblog_date[order(tblog_date$log_date),], nrow(tblog_date)-7), 3)
+ulog3$Freq <- 0 # 임시 생략 조치 - 혼동 방지
+daup3 <- daub[daub$log_date %in% ulog3$log_date,c(1,3)]
+
+# user별로 최근 3일간 이용 일수를 집계
+user_days3 <- aggregate(log_date ~ user_id, data = daup3, function(x) length(x))
+names(user_days3)[2] <- "log_days_r3d"
+head(user_days3)
+plot(user_days3$user_id, user_days3$log_days_r1w)
+uuserp2 <- merge(uuserp2, user_days3, by="user_id", all.x=T)
+uuserp2$log_days_r3d[is.na(uuserp2$log_days_r3d)] <- 0 # NA값 0으로 대체
+
+
+#------ 파생변수를 추가해서 의사결정나무 생성 :: 반복적 보완 -------
+
+t1 <- ctree(log_daysf ~ log_days + use_length + recency + gender + generation + 
+    device_type + inst_age + log_days_r2w + log_days_r1w + log_days_r3d,  
+    data=uuserp2, 
+    controls = ctree_control(maxdepth = 3, minbucket=100))
+plot(t1) 
+
+# 핵심 변수 두 가지를 사용한  scatter plot 작성
+#  최근 1주일간 이용일수와 최근 3일간 이용일수 
+#  최근 1주일간 이용일수 > 최근 3일간 이용일수 
+
+plot(jitter(uuserp2$log_days_r1w), jitter(uuserp2$log_days_r3d), 
+  col=rgb( .3, (1- uuserp1$log_daysf/max(uuserp1$log_daysf)), .7, alpha=.5),
+  pch=19, cex=0.5)
+
+
+rf1 <- randomForest(loggedf ~ log_days + use_length + recency + gender 
+  + generation + device_type + inst_age + log_days_r2w + log_days_r1w + 
+   log_days_r3d,  data=uuserp2, 
+    do.trace=50, ntree=1000, importance=T)
+plot(rf1)
+varImpPlot(rf1)
+rf1
+
+plot(jitter(uuserp2$log_days_r2w), jitter(uuserp2$recency), 
+  col=rgb( .3, (1- uuserp1$log_daysf/max(uuserp1$log_daysf)), .7, alpha=.5),
+  pch=19, cex=0.5)
+
+
+#----[ A024 ] ::  군집분석 등 다른 기법과 결합 분석 --------
+
+
+# 군집분석 활용
+
+asso1 <- uuserp1[,c("log_days", "use_length", "recency")]
+cor(asso1)
+
+fit <- kmeans(asso1, 5)
+table(fit$cluster)
+plot(asso1$log_days, asso1$use_length, col=fit$cluster, pch=19)
+plot(jitter(asso1$log_days), jitter(asso1$recency), col=fit$cluster, 
+  pch=ifelse(uuserp1$loggedf=="1",19,4))
+
+plot(jitter(asso1$log_days), jitter(asso1$recency), col=fit$cluster, 
+  pch=ifelse(uuserp1$loggedf=="1",19,4))
+
+plot(jitter(asso1$log_days/asso1$use_length), jitter(asso1$recency), col=fit$cluster, 
+  pch=ifelse(uuserp1$loggedf=="1",19,4))
+
+# standardize variables :: 단위 차이에 따른 영향은 적게 받도록
+# scale(x) = x - mean(x)/ sd(x - mean(x))
+asso2 <- as.data.frame(scale(asso1))
+fit2 <- kmeans(asso2, 5)
+table(fit2$cluster)
+
+plot(jitter(asso2$log_days), jitter(asso2$recency), col=fit2$cluster, 
+  pch=ifelse(uuserp1$loggedf=="1",19,4))
+
+
+#--- profiling : cluster distribution by gender, generation, device_type
+
+tb2 <- table(uuserp1$gender, fit2$cluster)
+barplot(tb2, beside=T, legend=rownames(tb2))
+
+tb2 <- table(uuserp1$generation, fit2$cluster)
+barplot(tb2, beside=T, legend=rownames(tb2))
+
+tb2 <- table(uuserp1$device_type, fit2$cluster)
+barplot(tb2, beside=T, legend=rownames(tb2), ylim=c(0,5000))
+
+#--- profiling : cluster distribution by behavioral variables
+
+tb2 <- table(ifelse(uuserp1$log_days>=10, "Freq", "Infreq"),  fit2$cluster)
+barplot(tb2, beside=T, legend=rownames(tb2), ylim=c(0,5000))
+
+tb2 <- table(ifelse(uuserp1$recency <= 14, "Active", "Inactive"),  fit2$cluster)
+barplot(tb2, beside=T, legend=rownames(tb2), ylim=c(0,5000))
+
+tb2 <- table(ifelse(uuserp1$use_length >= 30, "Old", "New"),  fit2$cluster)
+barplot(tb2, beside=T, legend=rownames(tb2), ylim=c(0,5000))
+
+
+#---- End of Script ------

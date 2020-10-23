@@ -1,0 +1,1254 @@
+---
+title: "Statistical Rethinking"
+author: "GGLee"
+date: "5/25/2017"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(rethinking)
+```
+
+```{r}
+# Load the data:
+# car braking distances in feet paired with speeds in km/h
+# see ?cars for details
+data(cars)
+# fit a linear regression of distance on speed
+m <- lm( dist ~ speed , data=cars )
+# estimated coefficients from the model
+coef(m)
+# plot residuals against speed
+plot( resid(m) ~ speed , data=cars )
+```
+
+```{r}
+# define grid
+p_grid <- seq( from=0 , to=1 , length.out=50 )
+# define prior
+#prior <- rep( 1 , 20 )
+prior <- ifelse( p_grid < 0.5 , 0 , 1 )
+#prior <- exp( -5*abs( p_grid - 0.5 ) )
+# compute likelihood at each value in grid
+likelihood <- dbinom( 6 , size=9 , prob=p_grid )
+# compute product of likelihood and prior
+unstd.posterior <- likelihood * prior
+# standardize the posterior, so it sums to 1
+posterior <- unstd.posterior / sum(unstd.posterior)
+plot( p_grid , posterior , type="b" ,
+    xlab="probability of water" , ylab="posterior probability" )
+mtext( "50 points" )
+```
+
+```{r}
+globe.qa <- map(
+    alist(
+        w ~ dbinom(90,p) ,  # binomial likelihood
+        p ~ dunif(0,1)     # uniform prior
+), data=list(w=60) )
+# display summary of quadratic approximation
+precis( globe.qa, prob=0.9, digit=4 )
+```
+
+```{r}
+w <- 60
+n <- 90
+curve(dbeta(x, w+1, n-w+1), from=0, to=1)
+curve(dnorm(x, 0.6667, 0.0497), lty=2, add=TRUE)
+```
+
+```{r}
+PrPV <- 0.95
+PrPM <- 0.01
+PrV <- 0.001
+PrP <- PrPV*PrV + PrPM*(1-PrV)
+( PrVP <- PrPV*PrV / PrP )
+```
+
+
+```{r}
+p_grid <- seq( from=0 , to=1 , length.out=1000 )
+prior <- rep( 1 , 1000 )
+likelihood <- dbinom( 6 , size=9 , prob=p_grid )
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+set.seed(100)
+samples <- sample( p_grid , prob=posterior , size=1e4 , replace=TRUE )
+```
+
+```{r}
+pos <- replicate(10000, sum(runif(50, -1, 1)))
+```
+
+```{r}
+w <- 6; n <- 9;
+p_grid <- seq(from=0,to=1,length.out=100)
+posterior <- dbinom(w,n,p_grid)*dunif(p_grid,0,1)
+posterior <- posterior/sum(posterior)
+```
+
+```{r}
+library(rethinking)
+data(Howell1)
+d <- Howell1
+d2 <- d[ d$age >= 18 , ]
+```
+
+```{r}
+p_grid <- seq( from=0 , to=1 , length.out=1000 )
+prior <- rep(1,1000)
+likelihood <- dbinom( 3 , size=3 , prob=p_grid )
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+samples <- sample( p_grid , size=1e4 , replace=TRUE , prob=posterior )
+```
+
+
+```{r}
+sample_mu <- rnorm( 1e4 , 178 , 20 )
+sample_sigma <- runif( 1e4 , 0 , 50 )
+prior_h <- rnorm( 1e4 , sample_mu , sample_sigma )
+dens( prior_h )
+```
+
+```{r}
+mu.list <- seq( from=140, to=160 , length.out=200 )
+sigma.list <- seq( from=4 , to=9 , length.out=200 )
+post <- expand.grid( mu=mu.list , sigma=sigma.list )
+post$LL <- sapply( 1:nrow(post) , function(i) sum( dnorm(
+                d2$height ,
+                mean=post$mu[i] ,
+                sd=post$sigma[i] ,
+                log=TRUE ) ) )
+post$prod <- post$LL + dnorm( post$mu , 178 , 20 , TRUE ) +
+    dunif( post$sigma , 0 , 50 , TRUE )
+post$prob <- exp( post$prod - max(post$prod) )
+```
+
+```{r}
+contour_xyz( post$mu , post$sigma , post$prob )
+```
+
+```{r}
+image_xyz( post$mu , post$sigma , post$prob )
+```
+
+```{r}
+sample.rows <- sample( 1:nrow(post) , size=1e4 , replace=TRUE ,
+    prob=post$prob )
+sample.mu <- post$mu[ sample.rows ]
+sample.sigma <- post$sigma[ sample.rows ]
+```
+
+```{r}
+plot( sample.mu , sample.sigma , cex=1 , pch=16 , col=col.alpha(rangi2,0.1)) 
+```
+
+```{r}
+dens( sample.mu )
+dens( sample.sigma )
+```
+
+```{r}
+HPDI( sample.mu )
+HPDI( sample.sigma )
+```
+
+```{r}
+d3 <- sample( d2$height , size=50 )
+mu.list <- seq( from=150, to=170 , length.out=200 )
+sigma.list <- seq( from=4 , to=20 , length.out=200 )
+post2 <- expand.grid( mu=mu.list , sigma=sigma.list )
+post2$LL <- sapply( 1:nrow(post2) , function(i)
+    sum( dnorm( d3 , mean=post2$mu[i] , sd=post2$sigma[i] ,
+    log=TRUE ) ) )
+post2$prod <- post2$LL + dnorm( post2$mu , 178 , 20 , TRUE ) +
+    dunif( post2$sigma , 0 , 50 , TRUE )
+post2$prob <- exp( post2$prod - max(post2$prod) )
+sample2.rows <- sample( 1:nrow(post2) , size=1e4 , replace=TRUE ,
+    prob=post2$prob )
+sample2.mu <- post2$mu[ sample2.rows ]
+sample2.sigma <- post2$sigma[ sample2.rows ]
+plot( sample2.mu , sample2.sigma , cex=0.5 ,
+    col=col.alpha(rangi2,0.1) ,
+    xlab="mu" , ylab="sigma" , pch=16 )
+dens( sample2.sigma , norm.comp=TRUE )
+```
+
+```{r}
+d3 <- sample( d2$height , size=90 )
+mu.list <- seq( from=150, to=170 , length.out=200 )
+sigma.list <- seq( from=4 , to=20 , length.out=200 )
+post2 <- expand.grid( mu=mu.list , sigma=sigma.list )
+post2$LL <- sapply( 1:nrow(post2) , function(i)
+    sum( dnorm( d3 , mean=post2$mu[i] , sd=post2$sigma[i] ,
+    log=TRUE ) ) )
+post2$prod <- post2$LL + dnorm( post2$mu , 178 , 20 , TRUE ) +
+    dunif( post2$sigma , 0 , 50 , TRUE )
+post2$prob <- exp( post2$prod - max(post2$prod) )
+sample2.rows <- sample( 1:nrow(post2) , size=1e4 , replace=TRUE ,
+    prob=post2$prob )
+sample2.mu <- post2$mu[ sample2.rows ]
+sample2.sigma <- post2$sigma[ sample2.rows ]
+plot( sample2.mu , sample2.sigma , cex=0.5 ,
+    col=col.alpha(rangi2,0.1) ,
+    xlab="mu" , ylab="sigma" , pch=16 )
+dens( sample2.sigma , norm.comp=TRUE )
+```
+
+
+```{r}
+library(rethinking)
+data(Howell1)
+d <- Howell1
+d2 <- d[ d$age >= 18 , ]
+flist <- alist(
+    height ~ dnorm( mu , sigma ) ,
+    mu ~ dnorm( 178 , 20 ) ,
+    sigma ~ dunif( 0 , 50 )
+)
+ 
+start <- list(
+    mu=mean(d2$height),
+    sigma=sd(d2$height)
+)
+m4.1 <- map( flist , data=d2, start=start )
+precis( m4.1 )
+m4.2 <- map(
+        alist(
+            height ~ dnorm( mu , sigma ) ,
+            mu ~ dnorm( 178 , 0.1 ) ,
+            sigma ~ dunif( 0 , 50 )
+),
+        data=d2 )
+precis( m4.2 )
+
+```
+
+```{r}
+m4.1_logsigma <- map(alist(
+  height ~ dnorm(mu , exp(log_sigma)) ,
+  mu ~ dnorm(178 , 20) ,
+  log_sigma ~ dnorm(2 , 10)
+  ) , data = d2)
+```
+
+
+```{r}
+# load data again, since it's a long way back
+library(rethinking)
+data(Howell1)
+d <- Howell1
+d2 <- d[ d$age >= 18 , ]
+# fit model
+m4.3 <- map(
+    alist(
+        height ~ dnorm( mu , sigma ) ,
+        mu <- a + b*weight ,
+        a ~ dnorm( 156 , 100 ) ,
+        b ~ dnorm( 0 , 10 ) ,
+        sigma ~ dunif( 0 , 50 )
+), data=d2 )
+```
+
+```{r}
+d2$weight.c <- d2$weight - mean(d2$weight)
+m4.4 <- map(
+    alist(
+        height ~ dnorm( mu , sigma ) ,
+        mu <- a + b * weight.c ,
+        a ~ dnorm( 154 , 100 ) ,
+        b ~ dnorm( 0 , 10 ) ,
+sigma ~ dunif( 0 , 50 ) ),
+data=d2 )
+precis(m4.4, corr=TRUE)
+```
+
+```{r}
+plot( height ~ weight , data=d2 )
+abline( a=coef(m4.3
+               )["a"] , b=coef(m4.3)["b"] )
+```
+```{r}
+post <- extract.samples( m4.3 )
+post[1:5,]
+nrow(post)
+```
+
+```{r}
+N <- 5
+dN <- d2[ 1:N , ]
+dN <- d2[sample(1:nrow(d2), size = 30), ]
+mN <- map(
+    alist(
+        height ~ dnorm( mu , sigma ) ,
+        mu <- a + b*weight ,
+        a ~ dnorm( 178 , 100 ) ,
+        b ~ dnorm( 0 , 10 ) ,
+        sigma ~ dunif( 0 , 50 )
+) , data=dN )
+
+post <- extract.samples( mN , n=10000 )
+# display raw data and sample size
+plot( dN$weight , dN$height ,
+    xlim=range(d2$weight) , ylim=range(d2$height) ,
+    col=rangi2 , xlab="weight" , ylab="height" )
+mtext(concat("N = ",N))
+# plot the lines, with transparency
+for ( i in 1:200 )
+    abline( a=post$a[i] , b=post$b[i] , col=col.alpha("black",0.05) )
+```
+
+
+```{r}
+post <- extract.samples( mN , n=1000000 )
+mu_at_50 <- post$a + post$b * 50
+dens( mu_at_50 , col=rangi2 , lwd=2 , xlab="mu|weight=50" )
+```
+
+
+```{r}
+# define sequence of weights to compute predictions for
+# these values will be on the horizontal axis
+weight.seq <- seq( from=25 , to=70 , by=1 )
+# use link to compute mu
+# for each sample from posterior
+# and for each weight in weight.seq
+mu <- link( m4.3 , data=data.frame(weight=weight.seq) )
+str(mu)
+# use type="n" to hide raw data
+plot( height ~ weight , d2 , type="n" )
+# loop over samples and plot each mu value
+for ( i in 1:100 )
+    points( weight.seq , mu[i,] , pch=16 , col=col.alpha(rangi2,0.1) )# summarize the distribution of mu
+mu.mean <- apply( mu , 2 , mean )
+mu.HPDI <- apply( mu , 2 , HPDI , prob=0.89 )
+```
+
+```{r}
+# plot raw data
+# fading out points to make line and interval more visible
+plot( height ~ weight , data=d2 , col=col.alpha(rangi2,0.5) )
+# plot the MAP line, aka the mean mu for each weight
+lines( weight.seq , mu.mean )
+# plot a shaded region for 89% HPDI
+shade( mu.HPDI , weight.seq )
+```
+
+```{r}
+d <- d[d$age > 18, ]
+d$weight.s <- (d$weight - mean(d$weight)) / sd(d$weight)
+d$weight.s2 <- d$weight.s^2
+d$weight.s3 <- d$weight.s^3
+m4.5 <- map(
+    alist(
+        height ~ dnorm( mu , sigma ) ,
+        mu <- a + b1*weight.s + b2*weight.s2 + b3*weight.s3,
+        a ~ dnorm( 178 , 100 ) ,
+        b1 ~ dnorm( 0 , 10 ) ,
+        b2 ~ dnorm( 0 , 10 ) ,
+        b3 ~ dnorm( 0 , 10 ) ,
+        sigma ~ dunif( 0 , 50 )
+), data=d )
+```
+
+```{r}
+weight.seq <- seq( from=-2.2 , to=2 , length.out=30 )
+pred_dat <- list( weight.s=weight.seq, weight.s2=weight.seq^2, weight.s3=weight.seq^3 )
+mu <- link( m4.5 , data=pred_dat )
+mu.mean <- apply( mu , 2 , mean )
+mu.PI <- apply( mu , 2 , PI , prob=0.89 )
+sim.height <- sim( m4.5 , data=pred_dat )
+height.PI <- apply( sim.height , 2 , PI ,prob = 0.89)
+```
+
+```{r}
+plot( height ~ weight.s , d , col=col.alpha(rangi2,0.5) ) 
+lines(weight.seq, mu.mean)
+shade(mu.PI, weight.seq)
+shade(height.PI, weight.seq)
+```
+
+
+```{r}
+plot( height ~ weight.s , d , col=col.alpha(rangi2,0.5) )
+lines( weight.seq , mu.mean )
+shade( mu.PI , weight.seq )
+shade( height.PI , weight.seq )
+```
+
+
+```{r}
+# load data
+library(rethinking)
+data(WaffleDivorce)
+d <- WaffleDivorce
+# standardize predictor
+d$MedianAgeMarriage.s <- (d$MedianAgeMarriage-mean(d$MedianAgeMarriage))/
+    sd(d$MedianAgeMarriage)
+# fit model
+m5.1 <- map(
+    alist(
+        Divorce ~ dnorm( mu , sigma ) ,
+        mu <- a + bA * MedianAgeMarriage.s ,
+        a ~ dnorm( 10 , 10 ) ,
+        bA ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 10 )
+) , data = d )
+```
+
+```{r}
+# compute percentile interval of mean
+MAM.seq <- seq( from=-3 , to=3.5 , length.out=30 )
+mu <- link( m5.1 , data=data.frame(MedianAgeMarriage.s=MAM.seq) )
+mu.PI <- apply( mu , 2 , PI )
+# plot it all
+plot( Divorce ~ MedianAgeMarriage.s , data=d , col=rangi2 )
+abline( m5.1 )
+shade( mu.PI , MAM.seq )
+```
+
+
+```{r}
+d$Marriage.s <- (d$Marriage - mean(d$Marriage))/sd(d$Marriage)
+m5.2 <- map(
+    alist(
+        Divorce ~ dnorm( mu , sigma ) ,
+        mu <- a + bR * Marriage.s ,
+        a ~ dnorm( 10 , 10 ) ,
+         bR ~ dnorm( 0 , 1 ) ,
+    sigma ~ dunif( 0 , 10 )
+) , data = d )
+MAM.seq <- seq( from=-3 , to=3.5 , length.out=30 )
+mu <- link( m5.2 , data=data.frame(Marriage.s=MAM.seq) )
+mu.PI <- apply( mu , 2 , PI )
+# plot it all
+plot( Divorce ~ Marriage.s , data=d , col=rangi2 )
+abline( m5.2 )
+shade( mu.PI , MAM.seq )
+precis(m5.2)
+```
+
+
+
+```{r}
+m5.3 <- map(
+    alist(
+        Divorce ~ dnorm( mu , sigma ) ,
+        mu <- a + bR*Marriage.s + bA*MedianAgeMarriage.s ,
+        a ~ dnorm( 10 , 10 ) ,
+        bR ~ dnorm( 0 , 1 ) ,
+        bA ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 10 )
+),
+    data = d )
+precis( m5.3 )
+```
+
+
+```{r}
+library(rethinking)
+data(milk)
+d <- milk
+str(d)
+dcc <- d[complete.cases(d), ]
+m5.5 <- map(
+    alist(
+        kcal.per.g ~ dnorm( mu , sigma ) ,
+        mu <- a + bn*neocortex.perc ,
+        a ~ dnorm( 0 , 100 ) ,
+        bn ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 1 ) ),
+data=dcc )
+```
+
+```{r}
+np.seq <- 0:100
+pred.data <- data.frame( neocortex.perc=np.seq )
+mu <- link( m5.5 , data=pred.data , n=1e4 )
+mu.mean <- apply( mu , 2 , mean )
+mu.PI <- apply( mu , 2 , PI )
+plot( kcal.per.g ~ neocortex.perc , data=dcc , col=rangi2 )
+lines( np.seq , mu.mean )
+lines( np.seq , mu.PI[1,] , lty=2 )
+lines( np.seq , mu.PI[2,] , lty=2 )
+```
+
+```{r}
+dcc$log.mass <- log(dcc$mass)
+m5.6 <- map(
+    alist(
+        kcal.per.g ~ dnorm( mu , sigma ) ,
+        mu <- a + bm*log.mass ,
+        a ~ dnorm( 0 , 100 ) ,
+        bm ~ dnorm( 0 , 1 ) ,
+    sigma ~ dunif( 0 , 1 ) ),
+    data=dcc )
+precis(m5.6)
+
+
+np.seq <- seq(-3, 5, length.out=100)
+pred.data <- data.frame( log.mass=np.seq )
+mu <- link( m5.6 , data=pred.data , n=1e4 )
+mu.mean <- apply( mu , 2 , mean )
+mu.PI <- apply( mu , 2 , PI )
+plot( kcal.per.g ~ log.mass , data=dcc , col=rangi2 )
+lines( np.seq , mu.mean )
+lines( np.seq , mu.PI[1,] , lty=2 )
+lines( np.seq , mu.PI[2,] , lty=2 )
+```
+
+```{r}
+m5.7 <- map(
+    alist(
+        kcal.per.g ~ dnorm( mu , sigma ) ,
+        mu <- a + bn*neocortex.perc + bm*log.mass ,
+        a ~ dnorm( 0 , 100 ) ,
+        bn ~ dnorm( 0 , 1 ) ,
+        bm ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 1 )),
+    data = dcc)
+precis(m5.7)
+```
+
+```{r}
+mean.log.mass <- mean( log(dcc$mass) )
+np.seq <- 0:100
+pred.data <- data.frame(
+    neocortex.perc=np.seq,
+    log.mass=mean.log.mass
+)
+mu <- link( m5.7 , data=pred.data , n=1e4 )
+mu.mean <- apply( mu , 2 , mean )
+mu.PI <- apply( mu , 2 , PI )
+plot( kcal.per.g ~ neocortex.perc , data=dcc  )
+lines( np.seq , mu.mean )
+lines( np.seq , mu.PI[1,] , lty=2 )
+lines( np.seq , mu.PI[2,] , lty=2 )
+```
+
+
+```{r}
+mean.neo <- mean( dcc$neocortex.perc )
+np.seq <- seq(-3, 5, length.out=101)
+pred.data <- data.frame(
+    neocortex.perc=mean.neo,
+    log.mass=np.seq
+)
+mu <- link( m5.7 , data=pred.data , n=1e4 )
+mu.mean <- apply( mu , 2 , mean )
+mu.PI <- apply( mu , 2 , PI )
+plot( kcal.per.g ~ log.mass , data=dcc  )
+lines( np.seq , mu.mean )
+lines( np.seq , mu.PI[1,] , lty=2 )
+lines( np.seq , mu.PI[2,] , lty=2 )
+```
+
+```{r}
+N <- 100
+rho <- 0.7
+x_pos <- rnorm( N )
+x_neg <- rnorm( N , rho*x_pos, sqrt(1-rho^2) )
+y <- rnorm( N , x_pos - x_neg )  # y equally associated with x_pos, x_neg
+d <- data.frame(y,x_pos,x_neg)   # bind all together in data frame
+```
+
+```{r}
+N <- 100
+height <- rnorm(N,10,2)
+leg_prop <- runif(N,0.4,0.5)
+leg_left <- leg_prop*height +
+    rnorm( N , 0 , 0.02 )
+leg_right <- leg_prop*height +
+    rnorm( N , 0 , 0.02 )
+d <- data.frame(height,leg_left,leg_right)
+```
+
+
+```{r}
+library(rethinking)
+m5.8 <- map(
+    alist(
+        height ~ dnorm( mu , sigma ) ,
+        mu <- a + bl*leg_left + br*leg_right ,
+        a ~ dnorm( 10 , 100 ) ,
+        bl ~ dnorm( 2 , 10 ) ,
+        br ~ dnorm( 2 , 10 ) ,
+        sigma ~ dunif( 0 , 10 )
+),
+    data=d )
+precis(m5.8)
+
+```
+
+```{r}
+sum_blbr <- post$bl + post$br
+dens( sum_blbr , col=rangi2 , lwd=2 , xlab="sum of bl and br" )
+```
+
+```{r}
+m5.9 <- map(
+    alist(
+        height ~ dnorm( mu , sigma ) ,
+        mu <- a + bl*leg_left,
+        a ~ dnorm( 10 , 100 ) ,
+         bl ~ dnorm( 2 , 10 ) ,
+sigma ~ dunif( 0 , 10 ) ),
+    data=d )
+precis(m5.9)
+```
+
+```{r}
+data(milk)
+d <- milk
+# kcal.per.g regressed on perc.fat
+m5.10 <- map(
+    alist(
+        kcal.per.g ~ dnorm( mu , sigma ) ,
+        mu <- a + bf*perc.fat ,
+        a ~ dnorm( 0.6 , 10 ) ,
+        bf ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 10 )
+),
+data=d )
+# kcal.per.g regressed on perc.lactose
+m5.11 <- map(
+    alist(
+        kcal.per.g ~ dnorm( mu , sigma ) ,
+        mu <- a + bl*perc.lactose ,
+        a ~ dnorm( 0.6 , 10 ) ,
+        bl ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 10 )
+), data=d )
+precis( m5.10 , digits=3 )
+plot(precis(m5.10))
+precis( m5.11 , digits=3 )
+plot(precis(m5.11))
+```
+
+```{r}
+ m5.12 <- map(
+    alist( kcal.per.g ~ dnorm( mu , sigma ) ,
+        mu <- a + bf*perc.fat + bl*perc.lactose ,
+        a ~ dnorm( 0.6 , 10 ) ,
+        bf ~ dnorm( 0 , 1 ) ,
+        bl ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 10 )
+),
+    data=d )
+precis( m5.12 , digits=3 )
+```
+
+```{r}
+library(rethinking)
+data(milk)
+d <- milk
+sim.coll <- function( r=0.9 ) {
+    d$x <- rnorm( nrow(d) , mean=r*d$perc.fat ,
+        sd=sqrt( (1-r^2)*var(d$perc.fat) ) )
+    m <- lm( kcal.per.g ~ perc.fat + x , data=d )
+    sqrt( diag( vcov(m) ) )[2] # stddev of parameter
+}
+rep.sim.coll <- function( r=0.9 , n=100 ) {
+    stddev <- replicate( n , sim.coll(r) )
+    mean(stddev)
+}
+r.seq <- seq(from=0,to=0.99,by=0.01)
+stddev <- sapply( r.seq , function(z) rep.sim.coll(r=z,n=100) )
+plot( stddev ~ r.seq , type="l" , col=rangi2, lwd=2 , xlab="correlation" )
+```
+
+
+```{r}
+# number of plants
+N <- 100
+# simulate initial heights
+h0 <- rnorm(N,10,2)
+# assign treatments and simulate fungus and growth
+treatment <- rep( 0:1 , each=N/2 )
+fungus <- rbinom( N , size=1 , prob=0.5 - treatment*0.4 )
+h1 <- h0 + rnorm(N, 5 - 3*fungus)
+# compose a clean data frame
+d <- data.frame( h0=h0 , h1=h1 , treatment=treatment , fungus=fungus )
+```
+
+
+```{r}
+m5.13 <- map(
+    alist(
+        h1 ~ dnorm(mu,sigma),
+        mu <- a + bh*h0 + bt*treatment + bf*fungus,
+        a ~ dnorm(0,100),
+        c(bh,bt,bf) ~ dnorm(0,10),
+        sigma ~ dunif(0,10)
+),
+    data=d )
+p <- precis(m5.13)
+plot(p)
+```
+
+
+```{r}
+m5.13 <- map(
+    alist(
+        h1 ~ dnorm(mu,sigma),
+        mu <- a + bh*h0 + bt*treatment,
+        a ~ dnorm(0,100),
+        c(bh,bt) ~ dnorm(0,10),
+        sigma ~ dunif(0,10)
+),
+    data=d )
+precis(m5.13)
+plot(precis(m5.13))
+```
+
+```{r}
+data(Howell1)
+d <- Howell1
+str(d)
+```
+
+
+```{r}
+m5.15 <- map(
+    alist(
+        height ~ dnorm( mu , sigma ) ,
+        mu <- a + bm*male ,
+        a ~ dnorm( 178 , 100 ) ,
+        bm ~ dnorm( 0 , 10 ) ,
+sigma ~ dunif( 0 , 50 ) ),
+    data=d )
+precis(m5.15)
+```
+
+
+```{r}
+post <- extract.samples(m5.15)
+mu.male <- post$a + post$bm
+PI(mu.male)
+```
+
+```{r}
+5.47
+m5.15b <- map(
+    alist(
+        height ~ dnorm( mu , sigma ) ,
+        mu <- af*(1-male) + am*male ,
+        af ~ dnorm( 178 , 100 ) ,
+        am ~ dnorm( 178 , 100 ) ,
+        sigma ~ dunif( 0 , 50 )
+), data=d )
+precis(m5.15b)
+```
+
+```{r}
+data(milk)
+d <- milk
+unique(d$clade)
+ ( d$clade.NWM <- ifelse( d$clade=="New World Monkey" , 1 , 0 ) )
+d$clade.OWM <- ifelse( d$clade=="Old World Monkey" , 1 , 0 )
+d$clade.S <- ifelse( d$clade=="Strepsirrhine" , 1 , 0 )
+```
+
+```{r}
+m5.16 <- map(
+    alist(
+        kcal.per.g ~ dnorm( mu , sigma ) ,
+        mu <- a + b.NWM*clade.NWM + b.OWM*clade.OWM + b.S*clade.S ,
+        a ~ dnorm( 0.6 , 10 ) ,
+        b.NWM ~ dnorm( 0 , 1 ) ,
+        b.OWM ~ dnorm( 0 , 1 ) ,
+        b.S ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 10 )
+),
+    data=d )
+precis(m5.16)
+plot(precis(m5.16))
+```
+
+```{r}
+# sample posterior
+post <- extract.samples(m5.16)
+# compute averages for each category
+mu.ape <- post$a
+mu.NWM <- post$a + post$b.NWM
+mu.OWM <- post$a + post$b.OWM
+mu.S <- post$a + post$b.S
+# summarize using precis
+pr <- precis( data.frame(mu.ape,mu.NWM,mu.OWM,mu.S) )
+plot(pr)
+```
+
+
+```{r}
+diff.NWM.OWM <- mu.NWM - mu.OWM
+quantile(diff.NWM.OWM, probs=c(0.025, 0.5, 0.975))
+hist(diff.NWM.OWM)
+dens(diff.NWM.OWM)
+```
+
+```{r}
+( d$clade_id <- coerce_index(d$clade) )
+m5.16_alt <- map(
+    alist(
+        kcal.per.g ~ dnorm( mu , sigma ) ,
+        mu <- a[clade_id] ,
+        a[clade_id] ~ dnorm( 0.6 , 10 ) ,
+        sigma ~ dunif( 0 , 10 )
+),
+    data=d )
+precis( m5.16_alt , depth=2 )
+```
+
+```{r}
+sppnames <- c( "afarensis","africanus","habilis","boisei",
+    "rudolfensis","ergaster","sapiens")
+brainvolcc <- c( 438 , 452 , 612, 521, 752, 871, 1350 )
+masskg <- c( 37.0 , 35.5 , 34.5 , 41.5 , 55.5 , 61.0 , 53.5 )
+d <- data.frame( species=sppnames , brain=brainvolcc , mass=masskg )
+```
+
+```{r}
+m6.1 <- lm( brain ~ mass , data=d )
+plot(m6.1)
+```
+
+```{r}
+m6.2 <- lm( brain ~ mass + I(mass^2) , data=d )
+m6.3 <- lm( brain ~ mass + I(mass^2) + I(mass^3) , data=d )
+m6.4 <- lm( brain ~ mass + I(mass^2) + I(mass^3) + I(mass^4) ,
+    data=d )
+m6.5 <- lm( brain ~ mass + I(mass^2) + I(mass^3) + I(mass^4) +
+    I(mass^5) , data=d )
+m6.6 <- lm( brain ~ mass + I(mass^2) + I(mass^3) + I(mass^4) +
+    I(mass^5) + I(mass^6) , data=d )
+ m6.7 <- lm( brain ~ 1 , data=d )
+```
+
+```{r}
+plot( brain ~ mass , d , col="slateblue" )
+for ( i in 1:nrow(d) ) {
+    d.new <- d[ -i , ]
+    m0 <- lm( brain ~ mass, d.new )
+    abline( m0 , col=col.alpha("black",0.5) )
+}
+```
+
+
+```{r}
+N <- 20
+kseq <- 1:5
+dev <- sapply( kseq , function(k) {
+        print(k);
+        r <- mcreplicate( 1e4 , sim.train.test( N=N, k=k ), mc.cores=4 );
+        c( mean(r[1,]) , mean(r[2,]) , sd(r[1,]) , sd(r[2,]) )
+})
+```
+
+
+```{r}
+plot( 1:5 , dev[1,] , ylim=c( min(dev[1:2,])-5 , max(dev[1:2,])+10 ) ,
+    xlim=c(1,5.1) , xlab="number of parameters" , ylab="deviance" ,
+    pch=16 , col=rangi2 )
+mtext( concat( "N = ",N ) )
+points( (1:5)+0.1 , dev[2,] )
+for ( i in kseq ) {
+    pts_in <- dev[1,i] + c(-1,+1)*dev[3,i]
+    pts_out <- dev[2,i] + c(-1,+1)*dev[4,i]
+    lines( c(i,i) , pts_in , col=r?angi2 )
+    lines( c(i,i)+0.1 , pts_out )
+}
+```
+
+```{r}
+data(cars)
+m <- map(
+  alist(
+    dist ~ dnorm(mu, sigma),
+    mu <- a + b * speed,
+    a ~ dnorm(0, 100),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 30)
+  ), 
+  data = cars
+)
+post <- extract.samples(m, n=1000)
+n_samples <- 1000
+ll <- sapply(1:n_samples,
+             function(s) {
+             mu <- post$a[s] + post$b[s] * cars$speed
+             dnorm(cars$dist, mu, post$sigma[s], log = TRUE)}
+             )
+
+n_cases <- nrow(cars)
+lppd <- sapply( 1:n_cases , function(i) log_sum_exp(ll[i,]) - log(n_samples) )
+
+pWAIC <- sapply( 1:n_cases , function(i) var(ll[i,]) )
+
+my_WAIC <- -2 * (sum(lppd) - sum(pWAIC))
+
+```
+
+
+```{r}
+data(milk)
+d <- milk[complete.cases(milk), ]
+d$neocortex <- d$neocortex.perc / 100
+dim(d)
+
+a.start <- mean(d$kcal.per.g)
+sigma.start <- log(sd(d$kcal.per.g))
+m6.11 <- map(
+    alist(
+        kcal.per.g ~ dnorm( a , exp(log.sigma) )
+),
+    data=d , start=list(a=a.start,log.sigma=sigma.start) )
+m6.12 <- map(
+    alist(
+        kcal.per.g ~ dnorm( mu , exp(log.sigma) ) ,
+        mu <- a + bn*neocortex
+),
+    data=d , start=list(a=a.start,bn=0,log.sigma=sigma.start) )
+m6.13 <- map(
+    alist(
+        kcal.per.g ~ dnorm( mu , exp(log.sigma) ) ,
+        mu <- a + bm*log(mass)
+),
+    data=d , start=list(a=a.start,bm=0,log.sigma=sigma.start) )
+m6.14 <- map(
+    alist(
+        kcal.per.g ~ dnorm( mu , exp(log.sigma) ) ,
+        mu <- a + bn*neocortex + bm*log(mass)
+),
+data=d , start=list(a=a.start,bn=0,bm=0,log.sigma=sigma.start) )
+
+
+WAIC(m6.11)
+WAIC(m6.12)
+WAIC(m6.13)
+WAIC(m6.14)
+
+```
+
+```{r}
+coeftab(m6.11,m6.12,m6.13,m6.14)
+plot(coeftab(m6.11,m6.12,m6.13,m6.14)
+)
+```
+
+
+```{r}
+# compute counterfactual predictions
+# neocortex from 0.5 to 0.8
+nc.seq <- seq(from=0.5,to=0.8,length.out=30)
+d.predict <- list(
+    kcal.per.g = rep(0,30), # empty outcome
+    neocortex = nc.seq,     # sequence of neocortex
+    mass = rep(4.5,30)      # average mass
+)
+pred.m6.14 <- link( m6.14 , data=d.predict )
+mu <- apply( pred.m6.14 , 2 , mean )
+mu.PI <- apply( pred.m6.14 , 2 , PI )
+# plot it all
+plot( kcal.per.g ~ neocortex , d , col=rangi2, xlim=c(0.5, 0.8) )
+lines( nc.seq , mu , lty=2 )
+lines( nc.seq , mu.PI[1,] , lty=2 )
+lines( nc.seq , mu.PI[2,] , lty=2 )
+```
+
+
+```{r}
+milk.ensemble <- ensemble( m6.11 , m6.12 , m6.13 , m6.14 , data=d.predict )
+mu <- apply( milk.ensemble$link , 2 , mean )
+mu.PI <- apply( milk.ensemble$link , 2 , PI )
+lines( nc.seq , mu )
+shade( mu.PI , nc.seq )
+```
+
+
+```{r}
+library(rethinking)
+data(rugged)
+d <- rugged
+```
+
+```{r}
+d$log_gdp <- log( d$rgdppc_2000 )
+
+# extract countries with GDP data
+dd <- d[ complete.cases(d$rgdppc_2000) , ]
+# split countries into Africa and not-Africa
+d.A1 <- dd[ dd$cont_africa==1 , ] # Africa
+d.A0 <- dd[ dd$cont_africa==0 , ] # not Africa
+
+# African nations
+m7.1 <- map(
+alist(
+        log_gdp ~ dnorm( mu , sigma ) ,
+        mu <- a + bR*rugged ,
+        a ~ dnorm( 8 , 100 ) ,
+        bR ~ dnorm( 0 , 1 ) ,
+sigma ~ dunif( 0 , 10 ) ),
+data=d.A1 )
+# non-African nations
+m7.2 <- map(
+    alist(
+        log_gdp ~ dnorm( mu , sigma ) ,
+        mu <- a + bR*rugged ,
+        a ~ dnorm( 8 , 100 ) ,
+        bR ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 10 )
+), data=d.A0 )
+
+m7.3 <- map(
+    alist(
+        log_gdp ~ dnorm( mu , sigma ) ,
+        mu <- a + bR*rugged ,
+        a ~ dnorm( 8 , 100 ) ,
+        bR ~ dnorm( 0 , 1 ) ,
+sigma ~ dunif( 0 , 10 ) ),
+data=dd )
+
+m7.4 <- map(
+    alist(
+        log_gdp ~ dnorm( mu , sigma ) ,
+        mu <- a + bR*rugged + bA*cont_africa ,
+        a ~ dnorm( 8 , 100 ) ,
+        bR ~ dnorm( 0 , 1 ) ,
+        bA ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 10 )
+), data=dd )
+
+compare( m7.3, m7.4)
+
+rugged.seq <- seq(from=-1,to=8,by=0.25)
+# compute mu over samples, fixing cont_africa=0
+mu.NotAfrica <- link( m7.4 , data=data.frame(cont_africa=0,rugged=rugged.seq) )
+# compute mu over samples, fixing cont_africa=1
+mu.Africa <- link( m7.4 , data=data.frame(cont_africa=1,rugged=rugged.seq) )
+# summarize to means and intervals
+mu.NotAfrica.mean <- apply( mu.NotAfrica , 2 , mean )
+mu.NotAfrica.PI <- apply( mu.NotAfrica , 2 , PI , prob=0.97 )
+mu.Africa.mean <- apply( mu.Africa , 2 , mean )
+mu.Africa.PI <- apply( mu.Africa , 2 , PI , prob=0.97 )
+
+```
+
+
+```{r}
+m7.5 <- map(
+    alist(
+        log_gdp ~ dnorm( mu , sigma ) ,
+        mu <- a + gamma*rugged + bA*cont_africa ,
+        gamma <- bR + bAR*cont_africa ,
+        a ~ dnorm( 8 , 100 ) ,
+        bA ~ dnorm( 0 , 1 ) ,
+        bR ~ dnorm( 0 , 1 ) ,
+        bAR ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 10 )
+), data=dd )
+
+ 
+m7.5b <- map(
+    alist(
+        log_gdp ~ dnorm( mu , sigma ) ,
+        mu <- a + bR*rugged + bAR*rugged*cont_africa + bA*cont_africa,
+        a ~ dnorm( 8 , 100 ) ,
+        bA ~ dnorm( 0 , 1 ) ,
+        bR ~ dnorm( 0 , 1 ) ,
+        bAR ~ dnorm( 0 , 1 ) ,
+        sigma ~ dunif( 0 , 10 )
+), data=dd )
+
+rugged.seq <- seq(from=-1,to=8,by=0.25)
+mu.Africa <- link( m7.5 , data=data.frame(cont_africa=1,rugged=rugged.seq) )
+mu.Africa.mean <- apply( mu.Africa , 2 , mean )
+mu.Africa.PI <- apply( mu.Africa , 2 , PI , prob=0.97 )
+mu.NotAfrica <- link( m7.5 , data=data.frame(cont_africa=0,rugged=rugged.seq) )
+mu.NotAfrica.mean <- apply( mu.NotAfrica , 2 , mean )
+mu.NotAfrica.PI <- apply( mu.NotAfrica , 2 , PI , prob=0.97 )
+
+# plot African nations with regression
+d.A1 <- dd[dd$cont_africa==1,]
+plot( log(rgdppc_2000) ~ rugged , data=d.A1 ,
+    col=rangi2 , ylab="log GDP year 2000" ,
+    xlab="Terrain Ruggedness Index" )
+mtext( "African nations" , 3 )
+lines( rugged.seq , mu.Africa.mean , col=rangi2 )
+shade( mu.Africa.PI , rugged.seq , col=col.alpha(rangi2,0.3) )
+# plot non-African nations with regression
+d.A0 <- dd[dd$cont_africa==0,]
+plot( log(rgdppc_2000) ~ rugged , data=d.A0 ,
+    col="black" , ylab="log GDP year 2000" ,
+    xlab="Terrain Ruggedness Index" )
+mtext( "Non-African nations" , 3 )
+lines( rugged.seq , mu.NotAfrica.mean )
+shade( mu.NotAfrica.PI , rugged.seq )
+
+```
+
+```{r}
+post <- extract.samples( m7.5 )
+gamma.Africa <- post$bR + post$bAR*1
+gamma.notAfrica <- post$bR + post$bAR*0
+mean( gamma.Africa)
+mean( gamma.notAfrica )
+dens( gamma.Africa , xlim=c(-0.5,0.6) , ylim=c(0,5.5) ,xlab="gamma" , col=rangi2 )
+dens( gamma.notAfrica , add=TRUE )
+diff <- gamma.Africa - gamma.notAfrica
+sum( diff < 0 ) / length( diff )
+```
+
+
+```{r}
+ 7.17
+# get minimum and maximum rugged values
+q.rugged <- range(dd$rugged)
+# compute lines and confidence intervals
+mu.ruggedlo <- link( m7.5 ,
+    data=data.frame(rugged=q.rugged[1],cont_africa=0:1) )
+mu.ruggedlo.mean <- apply( mu.ruggedlo , 2 , mean )
+mu.ruggedlo.PI <- apply( mu.ruggedlo , 2 , PI )
+mu.ruggedhi <- link( m7.5 ,
+    data=data.frame(rugged=q.rugged[2],cont_africa=0:1) )
+mu.ruggedhi.mean <- apply( mu.ruggedhi , 2 , mean )
+mu.ruggedhi.PI <- apply( mu.ruggedhi , 2 , PI )
+# plot it all, splitting points at median
+med.r <- median(dd$rugged)
+ox <- ifelse( dd$rugged > med.r , 0.05 , -0.05 )
+plot( dd$cont_africa + ox , log(dd$rgdppc_2000) ,
+    col=ifelse(dd$rugged>med.r,rangi2,"black") ,
+    xlim=c(-0.25,1.25) , xaxt="n" , ylab="log GDP year 2000" ,
+    xlab="Continent" )
+axis( 1 , at=c(0,1) , labels=c("other","Africa") )
+lines( 0:1 , mu.ruggedlo.mean , lty=2 )
+shade( mu.ruggedlo.PI , 0:1 )
+lines( 0:1 , mu.ruggedhi.mean , col=rangi2 )
+shade( mu.ruggedhi.PI , 0:1 , col=col.alpha(rangi2,0.25) )
+```
+
+
+```{r}
+library(rethinking)
+data(tulips)
+d <- tulips
+str(d)
+```
+
+```{r}
+m7.6 <- map(
+    alist(
+        blooms ~ dnorm( mu , sigma ) ,
+        mu <- a + bW*water + bS*shade ,
+        a ~ dnorm( 0 , 100 ) ,
+        bW ~ dnorm( 0 , 100 ) ,
+        bS ~ dnorm( 0 , 100 ) ,
+sigma ~ dunif( 0 , 100 ) ),
+    data=d )
+m7.7 <- map(
+    alist(
+        blooms ~ dnorm( mu , sigma ) ,
+        mu <- a + bW*water + bS*shade + bWS*water*shade ,
+        a ~ dnorm( 0 , 100 ) ,
+        bW ~ dnorm( 0 , 100 ) ,
+        bS ~ dnorm( 0 , 100 ) ,
+        bWS ~ dnorm( 0 , 100 ) ,
+        sigma ~ dunif( 0 , 100 )
+), data=d )
+```
+
+
+```{r}
+ 7.20
+m7.6 <- map(
+    alist(
+        blooms ~ dnorm( mu , sigma ) ,
+        mu <- a + bW*water + bS*shade ,
+        a ~ dnorm( 0 , 100 ) ,
+        bW ~ dnorm( 0 , 100 ) ,
+        bS ~ dnorm( 0 , 100 ) ,
+sigma ~ dunif( 0 , 100 ) ),
+    data=d ,
+    method="Nelder-Mead" ,
+    control=list(maxit=1e4) )
+m7.7 <- map(
+    alist(
+        blooms ~ dnorm( mu , sigma ) ,
+        mu <- a + bW*water + bS*shade + bWS*water*shade ,
+        a ~ dnorm( 0 , 100 ) ,
+        bW ~ dnorm( 0 , 100 ) ,
+        bS ~ dnorm( 0 , 100 ) ,
+        bWS ~ dnorm( 0 , 100 ) ,
+        sigma ~ dunif( 0 , 100 )
+),
+data=d , method="Nelder-Mead" , control=list(maxit=1e4) )
+
+
+coeftab(m7.6, m7.7)
+
+compare(m7.6, m7.7)
+
+```
+
+
+```{r}
+d$shade.c <- d$shade - mean(d$shade)
+d$water.c <- d$water - mean(d$water)
+m7.8 <- map(
+    alist(
+        blooms ~ dnorm( mu , sigma ) ,
+        mu <- a + bW*water.c + bS*shade.c ,
+        a ~ dnorm( 130 , 100 ) ,
+        bW ~ dnorm( 0 , 100 ) ,
+        bS ~ dnorm( 0 , 100 ) ,
+        sigma ~ dunif( 0 , 100 )
+),
+data=d , start=list(a=mean(d$blooms),bW=0,bS=0,sigma=sd(d$blooms)) )
+m7.9 <- map(
+    alist(
+        blooms ~ dnorm( mu , sigma ) ,
+        mu <- a + bW*water.c + bS*shade.c + bWS*water.c*shade.c ,
+        a ~ dnorm( 130 , 100 ) ,
+        bW ~ dnorm( 0 , 100 ) ,
+        bS ~ dnorm( 0 , 100 ) ,
+        bWS ~ dnorm( 0 , 100 ) ,
+        sigma ~ dunif( 0 , 100 )
+),
+data=d , start=list(a=mean(d$blooms),bW=0,bS=0,bWS=0,sigma=sd(d$blooms)) )
+coeftab(m7.8,m7.9)
+```
+
+```{r}
+k <- coef(m7.7)
+k[1] + k[2]*2 + k[3]*2 + k[4]*2*2
+k <- coef(m7.9)
+k[1] + k[2]*0 + k[3]*0 + k[4]*0*0
+precis(m7.9)
+```
+
+
+```{r}
+# make a plot window with three panels in a single row
+par(mfrow=c(1,3)) # 1 row, 3 columns
+# loop over values of water.c and plot predictions
+shade.seq <- -1:1
+for ( w in -1:1 ) {
+    dt <- d[d$water.c==w,]
+    plot( blooms ~ shade.c , data=dt , col=rangi2 ,
+        main=paste("water.c =",w) , xaxp=c(-1,1,2) , ylim=c(0,362) ,
+        xlab="shade (centered)" )
+    mu <- link( m7.8 , data=data.frame(water.c=w,shade.c=shade.seq) )
+    mu.mean <- apply( mu , 2 , mean )
+    mu.PI <- apply( mu , 2 , PI , prob=0.97 )
+    lines( shade.seq , mu.mean )
+    lines( shade.seq , mu.PI[1,] , lty=2 )
+    lines( shade.seq , mu.PI[2,] , lty=2 )
+}
+```
+
+
+```{r}
+m7.x <- lm( y ~ x + z + x*z , data=d )
+```
+

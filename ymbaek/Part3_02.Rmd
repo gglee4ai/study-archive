@@ -1,0 +1,170 @@
+---
+title: "3 Level model"
+output: html_notebook
+---
+
+```{r}
+library(lme4)
+library(lmerTest)
+library(tidyverse)
+```
+
+
+```{r}
+level3 <- read_csv("input/my3level_repeat.csv")
+level3
+```
+
+```{r}
+#l <- level3
+level3 %>%
+  select(gid, pid) %>%
+  summarise_at(vars(pid, gid), n_distinct)
+```
+
+```{r}
+level3 <- 
+  level3 %>%
+  group_by(gid) %>%
+  mutate(
+    gm.ix = ix - mean(ix),
+    cc.gx = ifelse(gx == 0, -1, 1)
+  )
+level3
+```
+
+```{r}
+temp <- 
+  level3 %>%
+  group_by(gid) %>%
+  summarise(gsize = length(gid), gmix = mean(ix)) %>%
+  mutate(
+    am.gsize = gsize - mean(gsize),
+    am.gmix = gmix - mean(gmix)
+  )
+temp 
+
+level3 <- 
+  level3 %>% 
+  inner_join(temp, by = "gid")
+level3
+```
+
+```{r}
+reshape(
+  data.frame(level3), 
+  idvar = "pid", 
+  varying=list(3:5), 
+  v.names = "y",
+  direction = "long"
+)
+```
+
+
+
+```{r}
+clus.rpt <-
+  level3 %>%
+  gather(y1, y2, y3, key = "time", value = "y") %>%
+  mutate(time = as.numeric(str_remove(time, "y")))
+clus.rpt
+```
+
+```{r}
+clus.rpt <-
+  clus.rpt %>%
+  group_by(pid) %>%
+  mutate(gm.time = time - mean(time))
+```
+
+```{r}
+clus.rpt %>%
+  group_by(pid) %>%
+  nest() %>%
+  sample_n(20) %>%
+  arrange(pid) %>%
+  unnest() %>%
+  ggplot(aes(x = time, y = y)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~ pid)
+```
+
+
+```{r}
+clus.rpt %>%
+  group_by(gid) %>%
+  nest() %>%
+  sample_n(20) %>%
+  arrange(gid) %>%
+  unnest() %>%
+  ungroup() ->
+clus.rpt.20
+```
+
+
+```{r}
+clus.rpt.20 %>%
+  filter(time == 1 ) 
+```
+
+```{r}
+clus.rpt.20 %>%
+  filter(time == 1) %>%
+  ggplot(aes(x = ix, y = y)) +
+  geom_point(size = 1.5, alpha = 0.2, color = "red") +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ gid)
+```
+
+```{r}
+clus.rpt.20 %>%
+  filter(time == 2) %>%
+  ggplot(aes(x = ix, y = y)) +
+  geom_point(size = 1.5, alpha = 0.2, color = "red") +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ gid)
+```
+
+```{r}
+clus.rpt.20 %>%
+  filter(time == 3) %>%
+  ggplot(aes(x = ix, y = y)) +
+  geom_point(size = 1.5, alpha = 0.2, color = "red") +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ gid)
+```
+
+
+```{r}
+CR.model0 <- lmer(
+  y ~ 1 + (1 | pid) + (1 | gid),
+  data = clus.rpt
+)
+print(summary(CR.model0))
+```
+
+```{r}
+CR.model1a <- lmer(
+  y ~ 1 + gm.time + (gm.time | pid) + (1 | gid),
+  data = clus.rpt
+)
+summary(CR.model1a)
+```
+
+```{r}
+CR.model1b <- lmer(
+  y ~ 1 + gm.time + (gm.time | pid) + (gm.time | gid),
+  data = clus.rpt
+)
+summary(CR.model1b)
+```
+
+```{r}
+AIC(CR.model0, CR.model1a, CR.model1b)
+```
+
+```{r}
+BIC(CR.model0, CR.model1a, CR.model1b)
+```
+

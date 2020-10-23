@@ -1,0 +1,150 @@
+---
+title: "Correlation and regression fundamentals with tidy data principles"
+date: 2020-05-22
+output: html_notebook
+---
+
+
+```{r}
+library(tidymodels)
+```
+
+```{r}
+data(Orange)
+Orange
+```
+
+```{r}
+Orange <- as_tibble(Orange)
+Orange
+```
+
+```{r}
+cor(Orange$age, Orange$circumference)
+```
+
+```{r}
+library(ggplot2)
+
+ggplot(Orange, aes(age, circumference, color = Tree)) +
+  geom_line()
+```
+
+```{r}
+Orange %>%
+  group_by(Tree) %>%
+  summarize(correnation = cor(age, circumference))
+```
+
+```{r}
+ct <- cor.test(Orange$age, Orange$circumference)
+ct
+```
+
+```{r}
+tidy(ct)
+```
+
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+nested <-
+  Orange %>%
+  nest(data = c(age, circumference))
+nested
+```
+
+```{r}
+nested %>%
+  mutate(
+    test = map(data, ~ cor.test(.x$age, .x$circumference)),
+    tidied = map(test, tidy)
+  ) %>%
+  unnest(cols = tidied) %>%
+  select(-data, -test)
+```
+
+```{r}
+lm_fit <- lm(age ~ circumference, data = Orange)
+summary(lm_fit)
+```
+
+```{r}
+tidy(lm_fit)
+```
+
+```{r}
+Orange %>%
+  nest(data = c(-Tree)) %>%
+  mutate(
+    fit = map(data, ~ lm(age ~ circumference, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  select(-data, -fit)
+```
+
+```{r}
+data(mtcars)
+mtcars
+```
+
+```{r}
+mtcars <- as_tibble(mtcars)
+mtcars
+```
+
+```{r}
+mtcars %>%
+  nest(data = c(-am)) %>%
+  mutate(
+    fit = map(data, ~ lm(wt ~ mpg + qsec + gear, data = .x)),
+    tidied = map(fit, tidy)
+  ) %>%
+  unnest(tidied) %>%
+  select(-data, -fit)
+```
+
+```{r}
+regressions <-
+  mtcars %>%
+  nest(data = c(-am)) %>%
+  mutate(
+    fit = map(data, ~ lm(wt ~ mpg + qsec + gear, data = .x)),
+    tidied = map(fit, tidy),
+    glanced = map(fit, glance),
+    augmented = map(fit, augment)
+  )
+regressions
+```
+
+```{r}
+regressions %>% 
+  select(tidied) %>% 
+  unnest(tidied)
+```
+
+```{r}
+regressions %>% 
+  select(glanced) %>% 
+  unnest(glanced)
+```
+
+```{r}
+regressions %>% 
+  select(augmented) %>% 
+  unnest(augmented)
+```
+
+
+
+
+
+
+
+
+
+

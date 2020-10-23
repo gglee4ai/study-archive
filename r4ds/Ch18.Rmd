@@ -1,0 +1,77 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(modelr)
+```
+
+```{r}
+ggplot(sim1, aes(x, y)) + geom_point()
+```
+
+```{r}
+models <- tibble(
+  a1 = runif(250, -20, 40),
+  a2 = runif(250, -5, 5)
+)
+models
+```
+
+```{r}
+ggplot(sim1, aes(x, y)) +
+  geom_abline(
+    data = models, aes(intercept = a1, slope = a2), alpha = 1 / 4
+  ) +
+  geom_point()
+```
+
+```{r}
+model1 <- function(a, data) {
+  a[1] + data$x * a[2]
+}
+```
+
+```{r}
+model1(c(7, 1.5), sim1)
+```
+
+```{r}
+measure_distance <- function(mod, data) {
+  diff <- data$y - model1(mod, data)
+  sqrt(mean(diff^2))
+}
+measure_distance(c(7, 1.5), sim1)
+```
+
+
+```{r}
+sim1_dist <- function(a1, a2) {
+  measure_distance(c(a1, a2), sim1)
+}
+models <- models %>%
+  mutate(dist = map2_dbl(a1, a2, sim1_dist))
+models
+```
+
+
+```{r}
+ggplot(sim1, aes(x, y)) +
+  geom_point(size = 2, color = "grey30") +
+  geom_abline(
+    aes(intercept = a1, slope = a2, color = -dist),
+    data = filter(models, rank(dist) <= 10)
+  )
+```
+
+```{r}
+ggplot(models, aes(a1, a2)) +
+  geom_point(
+    data = filter(models, rank(dist) <= 10),
+    
+  )
+```
+
+

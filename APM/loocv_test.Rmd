@@ -1,0 +1,66 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+
+```{r}
+library(ISLR)
+data(Auto)
+d = Auto
+glm.fit = glm(mpg ~ horsepower, data = d)
+summary(glm.fit)
+```
+
+```{r}
+lm.fit = lm(mpg ~ horsepower, data = d)
+summary(lm.fit)
+```
+
+```{r}
+library(boot) #cv.glm을 사용하기 위한 라이브러리입니다.
+cv.err=cv.glm(Auto, glm.fit) #cv.glm함수를 통해 LOOCV를 시행합니다.
+cv.err$delta #delta는 cross-validation 결과들을 담고 있습니다.
+```
+
+```{r}
+str(cv.err)
+```
+
+```{r}
+mean(resid(lm.fit)^2)
+```
+```{r}
+loocv=function(fit){
+  h=lm.influence(fit)$h
+  mean((residuals(fit)/(1-h))^2)
+}
+
+loocv(glm.fit)
+```
+
+```{r}
+n = 13
+cv.error=rep(0,n)
+degree=1:n #1차부터 5차함수까지 fitting해 봅시다.
+for(d in degree){
+  glm.fit=glm(mpg~poly(horsepower,d), data=Auto) #poly함수를 이용해 d차 함수를 fit할 수 있습니다.
+  cv.error[d]=loocv(glm.fit) #LOOCV 결과를 각 벡터에 저장합니다.
+}
+plot(degree,cv.error,type="b") #LOOCV 결과를 plot합니다.
+```
+

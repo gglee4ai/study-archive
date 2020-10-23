@@ -1,0 +1,46 @@
+---
+title: "R Notebook"
+output: 
+  html_notebook: 
+    number_sections: yes
+---
+
+```{r}
+population = rnorm(300000, 180, 10)
+hist(population)
+```
+
+
+
+
+```{r}
+n_sample <- 10000
+sample_m <- list()
+sample_s <- list()
+
+for (i in 1:10000) {
+  sample <- sample(population, n_sample, replace = TRUE)
+  sample_m[[i]] <- mean(sample)
+  sample_s[[i]] <- sd(sample)
+}
+
+mean(unlist(sample_m))
+mean(unlist(sample_s))
+mean(unlist(sample_s)) / sqrt(n_sample)
+```
+
+
+```{r}
+dbinom(5, 10, 0.5)
+```
+
+```{r}
+252 * 0.5^5 *0.5^5
+```
+
+```{r}
+x <- 0:100
+y <- dbinom(x, 10, 0.01)
+plot(x, y)
+```
+

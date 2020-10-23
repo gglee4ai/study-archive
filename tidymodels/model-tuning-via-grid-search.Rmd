@@ -1,0 +1,147 @@
+---
+title: "Model tuning via grid search"
+date: 2020-06-11
+output: html_notebook
+---
+
+# setup
+
+```{r}
+library(tidymodels)
+library(mlbench)
+```
+
+```{r}
+library(doParallel)
+all_cores <- parallel::detectCores(logical = TRUE)
+cl <- makeForkCluster(all_cores) # all_cores or 10 cores
+#cl <- makePSOCKcluster(all_cores)  # all_cores or 10
+registerDoParallel(cl)
+# stopCluster(cl)
+```
+
+
+```{r}
+data(Ionosphere)
+Ionosphere
+```
+
+```{r}
+Ionosphere %>% count(V1)
+Ionosphere %>% count(V2)
+```
+
+```{r}
+Ionosphere %>% 
+  summarize_all(mean)
+```
+
+```{r}
+ionosphere <-Ionosphere %>% select(-V2)
+```
+
+```{r}
+svm_mod <- 
+  svm_rbf(cost = tune(), rbf_sigma = tune()) %>% 
+  set_mode("classification") %>% 
+  set_engine("kernlab")
+```
+
+```{r}
+iono_rec <-
+  recipe(Class ~ ., data = ionosphere) %>% 
+  step_zv(all_predictors()) %>% 
+  step_dummy(V1) %>% 
+  step_range(matches("V1_"))
+iono_rec
+juice(prep(iono_rec, data = ionosphere))
+```
+
+```{r}
+set.seed(4943)
+iono_rs <- bootstraps(ionosphere, times = 30)
+iono_rs
+```
+
+```{r}
+analysis(iono_rs$splits[[1]])
+assessment(iono_rs$splits[[1]])
+```
+
+
+```{r}
+roc_vals <- metric_set(roc_auc)
+roc_vals
+```
+
+```{r}
+ctrl <- control_grid(verbose = FALSE)
+```
+
+```{r}
+set.seed(35)
+formula_res <- 
+  svm_mod %>% 
+  tune_grid(
+    Class ~ .,
+    resamples = iono_rs,
+    metrics = roc_vals,
+    control = ctrl
+  )
+formula_res
+```
+
+```{r}
+estimates <- collect_metrics(formula_res)
+estimates
+```
+```{r}
+show_best(formula_res, metric = "roc_auc")
+```
+
+
+## executing with a recipe
+
+```{r}
+set.seed(325)
+recipe_res <-
+  svm_mod %>% 
+  tune_grid(
+    iono_rec,
+    resamples = iono_rs,
+    metrics = roc_vals,
+    control = ctrl
+  )
+recipe_res
+```
+
+```{r}
+show_best(recipe_res, metric = "roc_auc")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

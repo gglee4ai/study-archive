@@ -1,0 +1,600 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup}
+knitr::opts_chunk$set()
+```
+
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+a <- 3.5
+b <- -1
+sigma_a <- 1
+sigma_b <- 0.5
+rho <- -.7
+
+mu <- c(a, b)
+
+# cov_ab <- sigma_a * sigma_b * rho
+# sigma <- matrix(c(sigma_a^2, cov_ab, cov_ab, sigma_b^2), ncol = 2)
+
+sigmas <- c(sigma_a, sigma_b)          # standard deviations
+rho    <- matrix(c(1, rho,             # correlation matrix
+                   rho, 1), nrow = 2)
+
+# now matrix multiply to get covariance matrix
+sigma <- diag(sigmas) %*% rho %*% diag(sigmas)
+
+n_cafes <- 20
+
+set.seed(13)
+vary_effects <-
+  MASS::mvrnorm(n_cafes, mu, sigma) %>%
+  data.frame() %>%
+  set_names("a_cafe", "b_cafe")
+
+head(vary_effects)
+```
+
+```{r}
+library(dutchmasters)
+
+dutchmasters$pearl_earring
+
+theme_pearl_earring <-
+  theme(text       = element_text(color = "#E8DCCF", family = "Courier"),
+        strip.text = element_text(color = "#E8DCCF", family = "Courier"),
+        axis.text  = element_text(color = "#E8DCCF"),
+        axis.ticks = element_line(color = "#E8DCCF"),
+        line       = element_line(color = "#E8DCCF"),
+        plot.background   = element_rect(fill = "#100F14", color = "transparent"),
+        panel.background  = element_rect(fill = "#100F14", color = "#E8DCCF"),
+        strip.background  = element_rect(fill = "#100F14", color = "transparent"),
+        panel.grid = element_blank(),
+        legend.background = element_rect(fill = "#100F14", color = "transparent"),
+        legend.key        = element_rect(fill = "#100F14", color = "transparent"),
+        axis.line = element_blank())
+```
+
+```{r}
+vary_effects %>%
+  ggplot(aes(x = a_cafe, y = b_cafe)) +
+  geom_point(color = "#80A0C7") +
+  geom_rug(color = "#8B9DAF", size = 1/7) +
+  theme_pearl_earring
+```
+
+```{r}
+n_visits <- 10
+sigma <- 0.5
+
+set.seed(13)
+
+d <-
+  vary_effects %>%
+  mutate(cafe = 1:n_cafes) %>%
+  expand(nesting(cafe, a_cafe, b_cafe), visit = 1:n_visits) %>%
+  mutate(afternoon = rep(0:1, times = n() / 2)) %>%
+  mutate(mu = a_cafe + b_cafe * afternoon) %>%
+  mutate(wait = rnorm(n = n(), mean = mu, sd = sigma))
+```
+
+
+```{r}
+d %>%
+  mutate(
+    afternoon = ifelse(afternoon == 0, "M", "A"),
+    day = rep(rep(1:5, each = 2), times = n_cafes)
+  ) %>%
+  filter(cafe %in% c(3, 5)) %>%
+  mutate(cafe = ifelse(cafe == 3, "cafe #3", "cafe #5")) %>%
+  ggplot(aes(x = visit, y = wait, group = day)) +
+  geom_point(aes(color = afternoon)) +
+  geom_line(color = "#8B9DAF") +
+  facet_wrap(~cafe, ncol = 1) +
+  scale_color_manual(values = c("#80A0C7", "#EEDA9D")) +
+  scale_x_continuous(NULL, breaks = 1:10, labels = rep(c("M", "A"), times = 5)) +
+  coord_cartesian(ylim = 0:4) +
+  ylab("wait time in minutes") +
+  theme_pearl_earring +
+  theme(legend.position = "non",
+        axis.ticks.x = element_blank())
+```
+
+
+```{r}
+library(rethinking)
+
+n_sim <- 1e5
+
+set.seed(13)
+r_1 <- 
+  rlkjcorr(n_sim, K = 2, eta = 1) %>%
+  as_tibble()
+
+set.seed(13)
+r_2 <- 
+  rlkjcorr(n_sim, K = 2, eta = 2) %>%
+  as_tibble()
+
+set.seed(13)
+r_4 <- 
+  rlkjcorr(n_sim, K = 2, eta = 4) %>%
+  as_tibble()
+```
+
+```{r}
+ggplot(data = r_1, aes(x = V2)) +
+  geom_density(color = "transparent", fill = "#DCA258", alpha = 2/3) +
+  geom_density(data = r_2,
+               color = "transparent", fill = "#FCF9F0", alpha = 2/3) +
+  geom_density(data = r_4,
+               color = "transparent", fill = "#394165", alpha = 2/3) +
+  geom_text(data = tibble(x     = c(.83, .62, .46),
+                          y     = c(.54, .74, 1),
+                          label = c("eta = 1", "eta = 2", "eta = 4")),
+            aes(x = x, y = y, label = label),
+            color = "#A65141", family = "Courier") +
+  scale_y_continuous(NULL, breaks = NULL) +
+  xlab("correlation") +
+  theme_pearl_earring
+```
+
+```{r}
+detach(package:rethinking, unload = T)
+library(brms)
+```
+
+```{r}
+b13.1 <- 
+  brm(
+    wait ~ 1 + afternoon + (1 + afternoon | cafe),
+    data = d, family = gaussian,
+    prior = c(
+      prior(normal(0, 10), class = Intercept),
+      prior(normal(0, 10), class = b),
+      prior(cauchy(0, 2), class = sd),
+      prior(cauchy(0, 2), class = sigma),
+      prior(lkj(2), class = cor)
+    ),
+    iter = 5000, warmup = 2000, chains = 2, cores = 2,
+    seed = 13
+  )
+```
+
+```{r}
+summary(b13.1)
+```
+
+```{r}
+post <- posterior_samples(b13.1)
+post
+```
+
+```{r}
+post %>%
+  ggplot(aes(x = cor_cafe__Intercept__afternoon)) +
+  geom_density(
+    data = r_2, aes(x = V2),
+    color = "transparent", fill = "#EEDA9D", alpha = 3/4
+  ) +
+  geom_density(color = "transparent", fill = "#A65141", alpha = 9/10) +
+  annotate(
+    "text", label = "posterior", 
+    x = -0.35, y = 2.2, 
+    color = "#A65141", family = "Courier") +
+  annotate(
+    "text", label = "prior",
+    x = 0, y = 0.9,
+    color = "#EEDA9D", alpha = 2/3, family = "Courier") +
+  scale_y_continuous(NULL, breaks = NULL) +
+  xlab("correlation") +
+  theme_pearl_earring
+```
+
+```{r}
+coef(b13.1)
+```
+
+```{r}
+partially_pooled_params <-
+  coef(b13.1)$cafe[, 1, 1:2] %>%
+  as_tibble() %>%
+  rename(Slope = afternoon) %>%
+  mutate(cafe = 1:nrow(.)) %>%
+  select(cafe, everything())
+```
+
+```{r}
+un_pooled_params <-
+  d %>%
+  group_by(afternoon, cafe) %>%
+  summarise(mean = mean(wait)) %>%
+  ungroup() %>%
+  mutate(afternoon = ifelse(afternoon == 0, "Intercept", "Slope")) %>%
+  spread(key = afternoon, value = mean) %>%
+  mutate(Slope = Slope - Intercept)
+
+params <-
+  bind_rows(partially_pooled_params, un_pooled_params) %>%
+  mutate(pooled = rep(c("partially", "not"), each = nrow(.)/2))
+params
+```
+
+
+```{r, fig.width=3, fig.height=2}
+ggplot(data = params, aes(x = Intercept, y = Slope)) +
+  stat_ellipse(geom = "polygon", type = "norm", level = 1/10, size = 0, alpha = 1/20, fill = "#E7CDC2") +
+  stat_ellipse(geom = "polygon", type = "norm", level = 2/10, size = 0, alpha = 1/20, fill = "#E7CDC2") +
+  stat_ellipse(geom = "polygon", type = "norm", level = 3/10, size = 0, alpha = 1/20, fill = "#E7CDC2") +
+  stat_ellipse(geom = "polygon", type = "norm", level = 4/10, size = 0, alpha = 1/20, fill = "#E7CDC2") +
+  stat_ellipse(geom = "polygon", type = "norm", level = 5/10, size = 0, alpha = 1/20, fill = "#E7CDC2") +
+  stat_ellipse(geom = "polygon", type = "norm", level = 6/10, size = 0, alpha = 1/20, fill = "#E7CDC2") +
+  stat_ellipse(geom = "polygon", type = "norm", level = 7/10, size = 0, alpha = 1/20, fill = "#E7CDC2") +
+  stat_ellipse(geom = "polygon", type = "norm", level = 8/10, size = 0, alpha = 1/20, fill = "#E7CDC2") +
+  stat_ellipse(geom = "polygon", type = "norm", level = 9/10, size = 0, alpha = 1/20, fill = "#E7CDC2") +
+  stat_ellipse(geom = "polygon", type = "norm", level = .99,  size = 0, alpha = 1/20, fill = "#E7CDC2") +
+  geom_point(aes(group = cafe, color = pooled))+
+  geom_line(aes(group = cafe), size = 1/3) +
+  scale_color_manual("Pooled?", values = c("#80A0C7", "#A65141")) +
+  coord_cartesian(xlim = range(params$Intercept), ylim = range(params$Slope)) +
+  theme_pearl_earring
+```
+
+```{r}
+# retrieve the partially-pooled estimates with `coef()`
+partially_pooled_estimates <-
+  coef(b13.1)$cafe[ , 1, 1:2] %>%
+  # convert the two vectors to a tibble
+  as_tibble() %>%
+  # the Intercept is the wait time for morning (i.e., `afternoon == 0`)
+  rename(morning = Intercept) %>%
+  # `afternoon` wait time is the `morning` wait time plus the afternoon slope
+  mutate(afternoon = morning + afternoon,
+         cafe      = 1:n()) %>%  # add the `cafe` index
+  select(cafe, everything()) 
+
+# compute unpooled estimates directly from data
+un_pooled_estimates <-
+  d %>%
+  # as above, with these two lines, we compute each cafe's mean wait value by time of day
+  group_by(afternoon, cafe) %>% 
+  summarise(mean = mean(wait)) %>%
+  # ungrouping allows us to alter the grouping variable, afternoon
+  ungroup() %>% 
+  mutate(afternoon = ifelse(afternoon == 0, "morning", "afternoon")) %>%
+  # this seperates out the values into morning and afternoon columns
+  spread(key = afternoon, value = mean)
+
+estimates <-
+  bind_rows(partially_pooled_estimates, un_pooled_estimates) %>%
+  mutate(pooled = rep(c("partially", "not"), each = n() / 2))
+```
+
+```{r}
+ggplot(data = estimates, aes(x = morning, y = afternoon)) +
+  # nesting `stat_ellipse()` within `mapply()` is a less redundant way to produce the
+  # ten-layered semitransparent ellipses we did with ten lines of `stat_ellipse()`
+  # functions in the previous plot
+  pmap(
+    list(level = c(seq(from = 1 / 10, to = 9 / 10, by = 1 / 10), .99)),
+    function(level) {
+      stat_ellipse(
+        geom = "polygon", type = "norm",
+        size = 0, alpha = 1 / 20, fill = "#E7CDC2",
+        level = level
+      )
+    }
+  ) +
+  geom_point(aes(group = cafe, color = pooled)) +
+  geom_line(aes(group = cafe), size = 1 / 4) +
+  scale_color_manual("Pooled?",
+    values = c("#80A0C7", "#A65141")
+  ) +
+  coord_cartesian(
+    xlim = range(estimates$morning),
+    ylim = range(estimates$afternoon)
+  ) +
+  labs(
+    x = "morning wait (mins)",
+    y = "afternoon wait (mins)"
+  ) +
+  theme_pearl_earring
+```
+
+
+```{r}
+library(rethinking)
+data(UCBadmit)
+d <- UCBadmit
+d
+```
+
+```{r}
+detach(package:rethinking, unload = T)
+library(brms)
+rm(UCBadmit)
+```
+
+
+```{r}
+d <- d %>%
+  mutate(
+    male = ifelse(applicant.gender == "male", 1, 0),
+    dept_id = rep(1:6, each = 2)
+  )
+d
+```
+
+```{r}
+b13.2 <-
+  brm(
+    data = d, family = binomial,
+    admit | trials(applications) ~ 1 + male + (1 | dept_id),
+    prior = c(
+      prior(normal(0, 10), class = Intercept),
+      prior(normal(0, 1), class = b),
+      prior(cauchy(0, 2), class = sd)
+    ),
+    iter = 4500, warmup = 500, chains = 3, cores = 3,
+    seed = 13,
+    control = list(adapt_delta = 0.99)
+  )
+```
+
+```{r}
+summary(b13.2)
+```
+
+```{r}
+b13.2$fit
+```
+
+```{r}
+coef(b13.2)
+```
+
+```{r}
+mean(coef(b13.2)$dept_id[ , "Estimate", "Intercept"])
+```
+
+```{r}
+str(coef(b13.2))
+```
+
+```{r}
+coef(b13.2)$dept_id[ , , "Intercept"]
+```
+
+```{r}
+rbind(coef(b13.2)$dept_id[, , "Intercept"],
+      fixef(b13.2),
+      VarCorr(b13.2)$dept_id$sd) %>%
+  as_tibble() %>%
+  mutate(
+    parameter = c(paste("Intercept [", 1:6, "]", sep = ""),
+                  "Intercept", "male", "sigma")) %>%
+  select(parameter, everything())
+```
+
+```{r}
+library(broom)
+
+tidy(b13.2) %>%
+  mutate_if(is.numeric, round, digits = 2) %>%
+  mutate(estimate2 = estimate + -0.61)
+```
+
+```{r}
+b13.2$fit
+```
+
+
+```{r}
+b13.3 <-
+  brm(
+    admit | trials(applications) ~ 1 + male + (1 + male | dept_id),
+    data = d, family = binomial,
+    prior = c(
+      prior(normal(0, 10), class = Intercept),
+      prior(normal(0, 1), class = b),
+      prior(cauchy(0, 2), class = sd),
+      prior(lkj(2), class = cor)),
+    iter = 5000, warmup = 1000, chains = 4, cores = 4,
+    seed = 13,
+    control = list(
+      adapt_delta = .99,
+      max_treedepth = 12
+    )
+  )
+```
+
+```{r}
+post <- posterior_samples(b13.3, add_chain = T)
+post
+```
+
+```{r, fig.width=4, fig.height=4}
+post %>%
+  select(-lp__) %>%
+  gather(key, value, -chain, -iter) %>%
+  mutate(chain = as.character(chain)) %>%
+  ggplot(aes(x = iter, y = value, group = chain, color = chain)) +
+  geom_line(size = 1 / 15) +
+  facet_wrap(~key, ncol = 3, scales = "free_y") +
+  scale_color_manual(values = c("#80A0C7", "#B1934A", "#A65141", "#EEDA9D")) +
+  scale_x_continuous(NULL, breaks = c(1001, 5000)) +
+  ylab(NULL) +
+  theme_pearl_earring +
+  theme(legend.position = c(.825, .06), legend.direction = "horizontal")
+  
+```
+
+```{r}
+rhat(b13.3) %>%
+  data.frame() %>%
+  rownames_to_column() %>%
+  set_names("parameter", "rhat") %>%
+  filter(parameter != "lp__") %>%
+  ggplot(aes(rhat, reorder(parameter, rhat))) +
+  geom_segment(aes(xend = 1, yend = parameter), color = "#EEDA9D") +
+  geom_point(aes(color = rhat > 1), size = 2) +
+  scale_color_manual(values = c("#80A0C7", "#A65141")) +
+  labs(x = NULL, y = NULL) +
+  theme_pearl_earring +
+  theme(
+    legend.position = "none",
+    axis.ticks.y = element_blank(),
+    axis.text.y = element_text(hjust = 0)
+  )
+```
+
+```{r}
+coef(b13.3)
+```
+
+
+
+```{r}
+rbind(coef(b13.3)$dept_id[, , 1],
+      coef(b13.3)$dept_id[, , 2]) %>% 
+  as_tibble() %>% 
+  mutate(param   = c(paste("Intercept", 1:6), paste("male", 1:6)),
+         reorder = c(6:1, 12:7)) %>% 
+
+  # plot
+  ggplot(aes(x = reorder(param, reorder))) +
+  geom_hline(yintercept = 0, linetype = 3, color = "#8B9DAF") +
+  geom_pointrange(aes(ymin = Q2.5, ymax = Q97.5, y = Estimate, color = reorder < 7),
+                  shape = 20, size = 3/4) +
+  scale_color_manual(values = c("#394165", "#A65141")) +
+  xlab(NULL) +
+  coord_flip() +
+  theme_pearl_earring +
+  theme(legend.position = "none",
+        axis.ticks.y    = element_blank(),
+        axis.text.y     = element_text(hjust = 0))
+```
+
+```{r}
+library(tidybayes)
+
+post <- posterior_samples(b13.3)
+
+post %>%
+  ggplot(aes(cor_dept_id__Intercept__male, 0)) +
+  geom_halfeyeh(
+    fill = "#394165", color = "#8B9DAF",
+    point_interval = median_qi, .width = .95) +
+  coord_cartesian(xlim = -1:1) +
+  scale_x_continuous(
+    breaks = c(-1, median(post$cor_dept_id__Intercept__male), 1), 
+    labels = c(-1, as.character(round(median(post$cor_dept_id__Intercept__male), 2)), 1),
+  ) + 
+  scale_y_continuous(NULL, breaks = NULL) +
+  labs(
+    subtitle = "The dot is at the median: the horizontal bar is the 95% CI.", 
+    x = "correlation"
+  ) +
+  theme_pearl_earring
+```
+
+```{r}
+# here we put the partially-pooled estimate summaries in a tibble
+partially_pooled_params <-
+  coef(b13.3)$dept_id[ , 1, ] %>%
+  as_tibble() %>%
+  set_names("intercept", "slope") %>%
+  mutate(dept = 1:n()) %>%
+  select(dept, everything())
+
+# in order to calculate the unpooled estimates from the data, we'll need a function that 
+# can convert probabilities into the logit metric. if you do the algebra, this is just
+# a transformation of the `inv_logit_scaled()` function.
+prob_to_logit <- function(x){
+  -log((1 / x) -1)
+  }
+
+# compute unpooled estimates directly from data
+un_pooled_params <-
+  d %>%
+  group_by(male, dept_id) %>%
+  summarise(prob_admit = mean(admit / applications)) %>%
+  ungroup() %>%
+  mutate(male = ifelse(male == 0, "intercept", "slope")) %>%
+  spread(key  = male, value = prob_admit) %>%
+  rename(dept = dept_id) %>%
+  # here we put our `prob_to_logit()` function to work
+  mutate(intercept = prob_to_logit(intercept),
+         slope     = prob_to_logit(slope)) %>%
+  mutate(slope     = slope - intercept)
+
+# here we combine the partially-pooled and unpooled means into a single data object
+params <-
+  bind_rows(partially_pooled_params, un_pooled_params) %>%
+  mutate(pooled      = rep(c("partially", "not"), each = n() / 2)) %>%
+  mutate(dept_letter = rep(LETTERS[1:6], times = 2))  # this will help with plotting
+
+params
+```
+
+```{r}
+library(ggrepel)
+
+ggplot(data = params, aes(x = intercept, y = slope)) +
+  mapply(function(level){
+    stat_ellipse(geom  = "polygon", type = "norm",
+                 size  = 0, alpha = 1/20, fill = "#E7CDC2",
+                 level = level)
+    },  
+    level = c(seq(from = 1/10, to = 9/10, by = 1/10), .99)) +
+  geom_point(aes(group = dept, color = pooled)) +
+  geom_line(aes(group = dept), size = 1/4) +
+  scale_color_manual("Pooled?",
+                     values = c("#80A0C7", "#A65141")) +
+  geom_text_repel(data = params %>% filter(pooled == "partially"),
+                  aes(label = dept_letter),
+                  color = "#E8DCCF", size = 4, family = "Courier", seed = 13.6) +
+  coord_cartesian(xlim = range(params$intercept),
+                  ylim = range(params$slope)) +
+  labs(x = expression(paste("intercept (", alpha[dept_id], ")")),
+       y = expression(paste("slope (", beta[dept_id], ")"))) +
+  theme_pearl_earring
+```
+
+```{r}
+b13.4 <- 
+  brm(data = d, family = binomial,
+      admit | trials(applications) ~ 1 + (1 | dept_id),
+      prior = c(prior(normal(0, 10), class = Intercept),
+                prior(cauchy(0, 2), class = sd)),
+      iter = 5000, warmup = 1000, chains = 4, cores = 4,
+      seed = 13,
+      control = list(adapt_delta = .99,
+                     max_treedepth = 12))
+```
+
+
+
+```{r}
+b13.2 <- add_criterion(b13.2, "waic")
+b13.3 <- add_criterion(b13.3, "waic")
+b13.4 <- add_criterion(b13.4, "waic")
+```
+
+```{r}
+loo_compare(b13.2, b13.3, b13.4, criterion = "waic") %>% 
+  print(simplify = F)
+```
+
+```{r}
+model_weights(b13.2, b13.3, b13.4, weights = "waic") %>% 
+  round(digits = 3)
+```
+

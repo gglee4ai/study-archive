@@ -1,0 +1,940 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+height = rnorm(100)
+earn = height + rnorm(100)
+dat = data.frame(height, earn)
+```
+
+
+```{r}
+library(ggplot2)
+qplot(height, earn) + geom_smooth(method=lm, se=TRUE)
+```
+```{r}
+library(rethinking)
+data(Trolley)
+d <- Trolley
+```
+
+```{r}
+simplehist( d$response , xlim=c(1,7) , xlab="response" )
+```
+```{r}
+pr_k <- table( d$response ) / nrow(d)
+# cumsum converts to cumulative proportions
+cum_pr_k <- cumsum( pr_k )
+# plot
+plot( 1:7 , cum_pr_k , type="b" , xlab="response" ,
+ylab="cumulative proportion" , ylim=c(0,1) )
+```
+
+```{r}
+logit <- function(x) log(x/(1-x)) # convenience function
+( lco <- logit( cum_pr_k ) )
+```
+
+```{r}
+m11.1 <- map(
+    alist(
+        response ~ dordlogit( phi , c(a1,a2,a3,a4,a5,a6) ),
+        phi <- 0,
+        c(a1,a2,a3,a4,a5,a6) ~ dnorm(0,10)
+),
+data=d , start=list(a1=-2,a2=-1,a3=0,a4=1,a5=2,a6=2.5) )
+precis(m11.1)
+```
+
+```{r}
+logistic(coef(m11.1))
+```
+
+```{r}
+library(rethinking)
+data(reedfrogs)
+d <- reedfrogs
+str(d)
+```
+
+```{r}
+d$tank <- 1:nrow(d)
+m12.1 <- map2stan(
+    alist(
+        surv ~ dbinom( density , p ) ,
+        logit(p) <- a_tank[tank] ,
+        a_tank[tank] ~ dnorm( 0 , 5 )
+), data=d )
+```
+
+```{r}
+precis(m12.1,depth=2) 
+```
+
+```{r}
+m12.2 <- map2stan(
+    alist(
+        surv ~ dbinom( density , p ) ,
+        logit(p) <- a_tank[tank] ,
+        a_tank[tank] ~ dnorm( a , sigma ) ,
+        a ~ dnorm(0,1),
+        sigma ~ dexp(1)
+    ), data=d , iter=4000 , chains=4 )
+```
+
+```{r}
+compare( m12.1 , m12.2 )
+precis(m12.2, depth=2)
+```
+
+```{r}
+# extract Stan samples
+post <- extract.samples(m12.2, n = 4000)
+
+# compute median intercept for each tank
+# also transform to probability with logistic
+d$propsurv.est <- logistic( apply( post$a_tank , 2 , median ) )
+
+# display raw proportions surviving in each tank
+plot( d$propsurv , ylim=c(0,1) , pch=16 , xaxt="n" ,
+    xlab="tank" , ylab="proportion survival" , col=rangi2 )
+axis( 1 , at=c(1,16,32,48) , labels=c(1,16,32,48) )
+# overlay posterior medians
+points( d$propsurv.est )
+# mark posterior median probability across tanks
+abline( h=logistic(median(post$a)) , lty=2 )
+# draw vertical dividers between tank densities
+abline( v=16.5 , lwd=0.5 )
+abline( v=32.5 , lwd=0.5 )
+text( 8 , 0 , "small tanks" )
+text( 16+8 , 0 , "medium tanks" )
+text( 32+8 , 0 , "large tanks" )
+```
+
+
+```{r}
+# show first 100 populations in the posterior
+plot( NULL , xlim=c(-3,4) , ylim=c(0,0.35) ,
+    xlab="log-odds survive" , ylab="Density" )
+for ( i in 1:300 )
+    curve( dnorm(x,post$a[i],post$sigma[i]) , add=TRUE ,
+    col=col.alpha("black",0.2))
+
+```
+
+
+```{r}
+# sample 8000 imaginary tanks from the posterior distribution
+sim_tanks <- rnorm( 8000, post$a , post$sigma )
+# transform to probability and visualize
+dens( logistic(sim_tanks) , xlab="probability survive" )
+```
+
+```{r}
+a <- 1.4
+sigma <- 1.5
+nponds <- 60
+ni <- as.integer( rep( c(5,10,25,35) , each=15 ) )
+a_pond <- rnorm(nponds, mean = 1, sd = sigma)
+dsim <- data.frame(pond = 1:nponds, ni = ni, true_a = a_pond)
+dsim$si <- rbinom(nponds, prob = logistic(dsim$true_a), size = dsim$ni)
+dsim$p_nopool <- dsim$si / dsim$ni
+```
+
+```{r}
+m12.3 <- map2stan(
+    alist(
+        si ~ dbinom( ni , p ),
+        logit(p) <- a_pond[pond],
+        a_pond[pond] ~ dnorm( a , sigma ),
+        a ~ dnorm(0,1),
+        sigma ~ dcauchy(0,1)
+), data=dsim , iter=1e4 , warmup=1000 )
+```
+
+```{r}
+precis(m12.3,depth=2)
+```
+
+```{r}
+estimated.a_pond <- as.numeric(coef(m12.3)[1:60])
+dsim$p_partpool <- logistic(estimated.a_pond)
+dsim$p_true <- logistic(dsim$true_a)
+nopool_error <- abs(dsim$p_nopool - dsim$p_true)
+partpool_error <- abs(dsim$p_partpool - dsim$p_true)
+plot( 1:60 , nopool_error , xlab="pond" , ylab="absolute error" ,
+    col=rangi2 , pch=16 )
+points( 1:60 , partpool_error )
+```
+
+```{r}
+ 
+a <- 1.4
+sigma <- 1.5
+nponds <- 60
+ni <- as.integer( rep( c(5,10,25,35) , each=15 ) )
+a_pond <- rnorm( nponds , mean=a , sd=sigma )
+dsim <- data.frame( pond=1:nponds , ni=ni , true_a=a_pond )
+dsim$si <- rbinom( nponds,prob=logistic( dsim$true_a ),size=dsim$ni )
+dsim$p_nopool <- dsim$si / dsim$ni
+newdat <- list(si=dsim$si,ni=dsim$ni,pond=1:nponds)
+m12.3new <- map2stan( m12.3 , data=newdat , iter=1e4 , warmup=1000 )
+
+```
+
+```{r}
+library(rethinking)
+data(chimpanzees)
+d <- chimpanzees
+d$recipient <- NULL
+m12.4 <- map2stan(
+    alist(
+# get rid of NAs
+    pulled_left ~ dbinom( 1 , p ) ,
+    logit(p) <- a + a_actor[actor] + (bp + bpC * condition) * prosoc_left ,
+    a_actor[actor] ~ dnorm( 0 , sigma_actor ),
+    a ~ dnorm(0,10),
+    bp ~ dnorm(0,10),
+    bpC ~ dnorm(0,10),
+    sigma_actor ~ dcauchy(0,1)
+),
+data=d , warmup=1000 , iter=5000 , chains=4 , cores=4 )
+```
+
+```{r}
+post <- extract.samples(m12.4)
+total_a_actor <- sapply( 1:7 , function(actor) post$a + post$a_actor[,actor] )
+round( apply(total_a_actor,2,mean) , 2 )
+```
+
+```{r}
+# prep data
+d$block_id <- d$block  # name 'block' is reserved by Stan
+m12.5 <- map2stan(
+    alist(
+        pulled_left ~ dbinom( 1 , p ),
+        logit(p) <- a + a_actor[actor] + a_block[block_id] +
+                    (bp + bpc*condition)*prosoc_left,
+        a_actor[actor] ~ dnorm( 0 , sigma_actor ),
+        a_block[block_id] ~ dnorm( 0 , sigma_block ),
+        c(a,bp,bpc) ~ dnorm(0,10),
+        sigma_actor ~ dcauchy(0,1),
+        sigma_block ~ dcauchy(0,1)
+),
+data=d, warmup=1000 , iter=6000 , chains=4 , cores=4 )
+```
+
+```{r}
+precis(m12.5,depth=2) # depth=2 displays varying effects
+plot(precis(m12.5,depth=2)) # also plot
+```
+
+
+```{r}
+post <- extract.samples(m12.5)
+dens( post$sigma_block , xlab="sigma" , xlim=c(0,4) )
+dens( post$sigma_actor , col=rangi2 , lwd=2 , add=TRUE )
+text( 2 , 0.85 , "actor" , col=rangi2 )
+text( 0.75 , 2 , "block" )
+```
+
+```{r}
+compare(m12.4, m12.5)
+```
+
+```{r}
+chimp <- 2
+d.pred <- list(
+    prosoc_left = c(0,1,0,1),
+    condition = c(0,0,1,1),
+    actor = rep(chimp,4)
+# right/left/right/left
+# control/control/partner/partner
+)
+link.m12.4 <- link( m12.4 , data=d.pred )
+pred.p <- apply( link.m12.4 , 2 , mean )
+pred.p.PI <- apply( link.m12.4 , 2 , PI )
+```
+
+```{r}
+# empty plot frame with good axes
+plot( 0 , 0 , type="n" , xlab="prosoc_left/condition" ,
+    ylab="proportion pulled left" , ylim=c(0,1) , xaxt="n" ,
+    xlim=c(1,4) )
+axis( 1 , at=1:4 , labels=c("0/0","1/0","0/1","1/1") )
+# plot raw data, one trend for each of 7 individual chimpanzees
+# will use by() here; see Overthinking box for explanation
+p <- by( d$pulled_left ,
+    list(d$prosoc_left,d$condition,d$actor) , mean )
+for ( chimp in 1:7 )
+    lines( 1:4 , as.vector(p[,,chimp]) , col=rangi2 , lwd=1.5 )
+# now superimpose posterior predictions
+lines( 1:4 , pred.p )
+shade( pred.p.PI , 1:4 )
+```
+
+```{r}
+post <- extract.samples(m12.4)
+str(post)
+dens( post$a_actor[,5] )
+```
+
+```{r}
+p.link <- function( prosoc_left , condition , actor ) {
+    logodds <- with( post ,
+        a + a_actor[,actor] + (bp + bpC * condition) * prosoc_left
+    )
+    return( logistic(logodds) )
+}
+```
+
+```{r}
+prosoc_left <- c(0,1,0,1)
+condition <- c(0,0,1,1)
+pred.raw <- sapply( 1:4 , function(i) p.link(prosoc_left[i],condition[i],2) )
+pred.p <- apply( pred.raw , 2 , mean )
+pred.p.PI <- apply( pred.raw , 2 , PI )
+```
+
+```{r}
+d.pred <- list(
+    prosoc_left = c(0,1,0,1),
+    condition = c(0,0,1,1),
+    actor = rep(2,4) )
+# right/left/right/left
+# control/control/partner/partner
+# placeholder
+```
+
+```{r}
+# replace varying intercept samples with zeros
+# 1000 samples by 7 actors
+a_actor_zeros <- matrix(0,1000,7)
+```
+
+```{r}
+# fire up link
+# note use of replace list
+link.m12.4 <- link( m12.4 , n=1000 , data=d.pred ,
+    replace=list(a_actor=a_actor_zeros) )
+# summarize and plot
+pred.p.mean <- apply( link.m12.4 , 2 , mean )
+pred.p.PI <- apply( link.m12.4 , 2 , PI , prob=0.8 )
+plot( 0 , 0 , type="n" , xlab="prosoc_left/condition" ,
+    ylab="proportion pulled left" , ylim=c(0,1) , xaxt="n" ,
+    xlim=c(1,4) )
+axis( 1 , at=1:4 , labels=c("0/0","1/0","0/1","1/1") )
+lines( 1:4 , pred.p.mean )
+shade( pred.p.PI , 1:4 )
+```
+
+```{r}
+# replace varying intercept samples with simulations
+post <- extract.samples(m12.4)
+a_actor_sims <- rnorm(7000,0,post$sigma_actor)
+a_actor_sims <- matrix(a_actor_sims,1000,7)
+```
+
+```{r}
+post <- extract.samples(m12.4)
+sim.actor <- function(i) {
+    sim_a_actor <- rnorm( 1 , 0 , post$sigma_actor[i] )
+    P <- c(0,1,0,1)
+    C <- c(0,0,1,1)
+    p <- logistic(
+        post$a[i] +
+        sim_a_actor +
+        (post$bp[i] + post$bpC[i]*C)*P
+)
+return(p) }
+```
+
+```{r}
+# empty plot
+plot( 0 , 0 , type="n" , xlab="prosoc_left/condition" ,
+    ylab="proportion pulled left" , ylim=c(0,1) , xaxt="n" , xlim=c(1,4) )
+axis( 1 , at=1:4 , labels=c("0/0","1/0","0/1","1/1") )
+# plot 50 simulated actors
+for ( i in 1:50 ) lines( 1:4 , sim.actor(i) , col=col.alpha("black",0.5) )
+```
+
+```{r}
+# prep data
+library(rethinking)
+data(Kline)
+d <- Kline
+d$logpop <- log(d$population)
+d$society <- 1:10
+# fit model
+m12.6 <- map2stan(alist(
+    total_tools ~ dpois(mu),
+    log(mu) <- a + a_society[society] + bp*logpop,
+    a ~ dnorm(0,10),
+    bp ~ dnorm(0,1),
+    a_society[society] ~ dnorm(0,sigma_society),
+    sigma_society ~ dcauchy(0,1)
+),
+data=d ,
+iter=4000 , chains=3 )
+```
+
+
+```{r}
+post <- extract.samples(m12.6)
+d.pred <- list(
+    logpop = seq(from=6,to=14,length.out=30),
+    society = rep(1,30)
+)
+a_society_sims <- rnorm(20000,0,post$sigma_society)
+a_society_sims <- matrix(a_society_sims,2000,10)
+link.m12.6 <- link( m12.6 , n=2000 , data=d.pred ,
+    replace=list(a_society=a_society_sims) )
+```
+
+```{r}
+# plot raw data
+plot( d$logpop , d$total_tools , col=rangi2 , pch=16 ,
+    xlab="log population" , ylab="total tools" )
+# plot posterior median
+mu.median <- apply( link.m12.6 , 2 , median )
+lines( d.pred$logpop , mu.median )
+# plot 97%, 89%, and 67% intervals (all prime numbers)
+mu.PI <- apply( link.m12.6 , 2 , PI , prob=0.97 )
+shade( mu.PI , d.pred$logpop )
+```
+
+
+```{r}
+mu.PI <- apply( link.m12.6 , 2 , PI , prob=0.89 )
+shade( mu.PI , d.pred$logpop )
+mu.PI <- apply( link.m12.6 , 2 , PI , prob=0.67 )
+shade( mu.PI , d.pred$logpop )
+```
+
+```{r}
+a <- 3.5 # average morning wait time
+b <- -1 # average difference afternoon wati time
+sigma_a <- 1 # std dev in interceopts
+sigma_b <- 0.5 # std dev in slopes
+rho <- -0.7 # correlation between intercepts and slopes
+
+Mu <- c(a, b)
+cov_ab <- sigma_a * sigma_b * rho
+Sigma <- matrix(c(sigma_a ^ 2, cov_ab, cov_ab, sigma_b ^ 2), ncol = 2)
+
+sigmas <- c(sigma_a,sigma_b) 
+Rho <- matrix( c(1,rho,rho,1) , nrow=2 )
+
+N_cafes <- 20
+library(MASS)
+set.seed(5)
+vary_effects <- mvrnorm(N_cafes, Mu, Sigma)
+a_cafe <- vary_effects[,1]
+b_cafe <- vary_effects[,2]
+
+plot( a_cafe , b_cafe , col=rangi2 ,
+    xlab="intercepts (a_cafe)" , ylab="slopes (b_cafe)" )
+# overlay population distribution
+library(ellipse)
+for ( l in c(0.1,0.3,0.5,0.8,0.99) )
+    lines(ellipse(Sigma,centre=Mu,level=l),col=col.alpha("black",0.2))
+```
+
+```{r}
+N_visits <- 10
+afternoon <- rep(0:1,N_visits*N_cafes/2)
+cafe_id <- rep( 1:N_cafes , each=N_visits )
+```
+
+```{r}
+mu <- a_cafe[cafe_id] + b_cafe[cafe_id]*afternoon
+sigma <- 0.5  # std dev within cafes
+wait <- rnorm( N_visits*N_cafes , mu , sigma )
+d <- data.frame( cafe=cafe_id , afternoon=afternoon , wait=wait )
+
+```
+
+```{r}
+
+R code 13.12
+R <- rlkjcorr( 1e4 , K=2 , eta=2 )
+dens( R[,1,2] , xlab="correlation")
+```
+
+```{r}
+m13.1 <- map2stan(
+    alist(
+        wait ~ dnorm( mu , sigma ),
+        mu <- a_cafe[cafe] + b_cafe[cafe]*afternoon,
+        c(a_cafe,b_cafe)[cafe] ~ dmvnorm2(c(a,b),sigma_cafe,Rho),
+        a ~ dnorm(0,10),
+        b ~ dnorm(0,10),
+        sigma_cafe ~ dcauchy(0,2),
+        sigma ~ dcauchy(0,2),
+        Rho ~ dlkjcorr(2)
+),
+data=d ,
+iter=5000 , warmup=2000 , chains=2 )
+```
+
+```{r}
+post <- extract.samples(m13.1)
+dens( post$Rho[,1,2] )
+```
+
+```{r}
+# compute unpooled estimates directly from data
+a1 <- sapply( 1:N_cafes ,
+        function(i) mean(wait[cafe_id==i & afternoon==0]) )
+b1 <- sapply( 1:N_cafes ,
+        function(i) mean(wait[cafe_id==i & afternoon==1]) ) - a1
+# extract posterior means of partially pooled estimates
+post <- extract.samples(m13.1)
+a2 <- apply( post$a_cafe , 2 , mean )
+b2 <- apply( post$b_cafe , 2 , mean )
+# plot both and connect with lines
+plot( a1 , b1 , xlab="intercept" , ylab="slope" ,
+    pch=16 , col=rangi2 , ylim=c( min(b1)-0.1 , max(b1)+0.1 ) ,
+    xlim=c( min(a1)-0.1 , max(a1)+0.1 ) )
+points( a2 , b2 , pch=1 )
+for ( i in 1:N_cafes ) lines( c(a1[i],a2[i]) , c(b1[i],b2[i]) )
+
+
+# compute posterior mean bivariate Gaussian
+Mu_est <- c( mean(post$a) , mean(post$b) )
+rho_est <- mean( post$Rho[,1,2] )
+sa_est <- mean( post$sigma_cafe[,1] )
+sb_est <- mean( post$sigma_cafe[,2] )
+cov_ab <- sa_est*sb_est*rho_est
+Sigma_est <- matrix( c(sa_est^2,cov_ab,cov_ab,sb_est^2) , ncol=2 )
+# draw contours
+library(ellipse)
+for ( l in c(0.1,0.3,0.5,0.8,0.99) )
+    lines(ellipse(Sigma_est,centre=Mu_est,level=l),
+        col=col.alpha("black",0.2))
+```
+
+```{r}
+# convert varying effects to waiting times
+wait_morning_1 <- (a1)
+wait_afternoon_1 <- (a1 + b1)
+wait_morning_2 <- (a2)
+wait_afternoon_2 <- (a2 + b2)
+```
+
+
+```{r}
+library(rethinking)
+data(UCBadmit)
+d <- UCBadmit
+d$male <- ifelse( d$applicant.gender=="male" , 1 , 0 )
+d$dept_id <- coerce_index( d$dept )
+```
+
+```{r}
+m13.2 <- map2stan(
+    alist(
+        admit ~ dbinom( applications , p ),
+        logit(p) <- a_dept[dept_id] + bm*male,
+        a_dept[dept_id] ~ dnorm( a , sigma_dept ),
+        a ~ dnorm(0,10),
+        bm ~ dnorm(0,1),
+        sigma_dept ~ dcauchy(0,2)
+),
+    data=d , warmup=500 , iter=4500 , chains=3 )
+precis( m13.2 , depth=2 ) # depth=2 to display vector parameters
+```
+
+```{r}
+m13.3 <- map2stan(
+    alist(
+        admit ~ dbinom( applications , p ),
+        logit(p) <- a_dept[dept_id] +
+                    bm_dept[dept_id]*male,
+        c(a_dept,bm_dept)[dept_id] ~ dmvnorm2( c(a,bm) , sigma_dept , Rho ),
+        a ~ dnorm(0,10),
+        bm ~ dnorm(0,1),
+        sigma_dept ~ dcauchy(0,2),
+        Rho ~ dlkjcorr(2)
+),
+data=d , warmup=1000 , iter=5000 , chains=4 , cores=3 )
+```
+
+```{r}
+plot( precis(m13.3,pars=c("a_dept","bm_dept"),depth=2) )
+```
+
+```{r}
+m13.4 <- map2stan(
+    alist(
+        admit ~ dbinom( applications , p ),
+        logit(p) <- a_dept[dept_id],
+        a_dept[dept_id] ~ dnorm( a , sigma_dept ),
+        a ~ dnorm(0,10),
+sigma_dept ~ dcauchy(0,2) ),
+    data=d , warmup=500 , iter=4500 , chains=3 )
+compare( m13.2 , m13.3 , m13.4 )
+```
+
+```{r}
+library(rethinking)
+data(chimpanzees)
+d <- chimpanzees
+d$recipient <- NULL
+d$block_id <- d$block
+m13.6 <- map2stan(
+    alist(
+        # likeliood
+        pulled_left ~ dbinom(1,p),
+        # linear models
+        logit(p) <- A + (BP + BPC*condition)*prosoc_left,
+        A <- a + a_actor[actor] + a_block[block_id],
+        BP <- bp + bp_actor[actor] + bp_block[block_id],
+        BPC <- bpc + bpc_actor[actor] + bpc_block[block_id],
+        # adaptive priors
+        c(a_actor,bp_actor,bpc_actor)[actor] ~
+                                dmvnorm2(0,sigma_actor,Rho_actor),
+        c(a_block,bp_block,bpc_block)[block_id] ~
+          dmvnorm2(0,sigma_block,Rho_block),
+           # fixed priors
+    c(a,bp,bpc) ~ dnorm(0,1),
+    sigma_actor ~ dcauchy(0,2),
+    sigma_block ~ dcauchy(0,2),
+    Rho_actor ~ dlkjcorr(4),
+    Rho_block ~ dlkjcorr(4)
+) , data=d , iter=5000 , warmup=1000 , chains=3 , cores=3 )
+```
+
+```{r}
+R code 13.23
+m13.6NC <- map2stan(
+    alist(
+        pulled_left ~ dbinom(1,p),
+        logit(p) <- A + (BP + BPC*condition)*prosoc_left,
+        A <- a + a_actor[actor] + a_block[block_id],
+        BP <- bp + bp_actor[actor] + bp_block[block_id],
+        BPC <- bpc + bpc_actor[actor] + bpc_block[block_id],
+        # adaptive NON-CENTERED priors
+        c(a_actor,bp_actor,bpc_actor)[actor] ~
+                                dmvnormNC(sigma_actor,Rho_actor),
+        c(a_block,bp_block,bpc_block)[block_id] ~
+                                dmvnormNC(sigma_block,Rho_block),
+        c(a,bp,bpc) ~ dnorm(0,1),
+        sigma_actor ~ dcauchy(0,2),
+        sigma_block ~ dcauchy(0,2),
+        Rho_actor ~ dlkjcorr(4),
+        Rho_block ~ dlkjcorr(4)
+    ) , data=d , iter=5000 , warmup=1000 , chains=3 , cores=3 )
+```
+
+```{r}
+# extract n_eff values for each model
+neff_c <- precis(m13.6,2)@output$n_eff
+neff_nc <- precis(m13.6NC,2)@output$n_eff
+# plot distributions
+boxplot( list( 'm13.6'=neff_c , 'm13.6NC'=neff_nc ) ,
+    ylab="effective samples" , xlab="model" )
+```
+
+```{r}
+p <- link(m13.6NC)
+str(p)
+```
+
+```{r}
+compare( m13.6NC , m12.5 )
+```
+
+```{r}
+m13.6nc1 <- map2stan(
+    alist(
+        pulled_left ~ dbinom(1,p),
+        # linear models
+        logit(p) <- A + (BP + BPC*condition)*prosoc_left,
+        A <- a + za_actor[actor]*sigma_actor[1] +
+                 za_block[block_id]*sigma_block[1],
+        BP <- bp + zbp_actor[actor]*sigma_actor[2] +
+                   zbp_block[block_id]*sigma_block[2],
+        BPC <- bpc + zbpc_actor[actor]*sigma_actor[3] +
+                     zbpc_block[block_id]*sigma_block[3],
+        # adaptive priors
+        c(za_actor,zbp_actor,zbpc_actor)[actor] ~ dmvnorm(0,Rho_actor),
+        c(za_block,zbp_block,zbpc_block)[block_id] ~ dmvnorm(0,Rho_block),
+        # fixed priors
+        c(a,bp,bpc) ~ dnorm(0,1),
+        sigma_actor ~ dcauchy(0,2),
+        sigma_block ~ dcauchy(0,2),
+        Rho_actor ~ dlkjcorr(4),
+        Rho_block ~ dlkjcorr(4)
+),
+data=d ,
+start=list( sigma_actor=c(1,1,1), sigma_block=c(1,1,1) ), constraints=list( sigma_actor="lower=0", sigma_block="lower=0" ), types=list( Rho_actor="corr_matrix", Rho_block="corr_matrix" ), iter=5000 , warmup=1000 , chains=3 , cores=3 )
+```
+
+```{r}
+# load the distance matrix
+library(rethinking)
+data(islandsDistMatrix)
+# display short column names, so fits on screen
+Dmat <- islandsDistMatrix
+colnames(Dmat) <- c("Ml","Ti","SC","Ya","Fi","Tr","Ch","Mn","To","Ha")
+round(Dmat,1)
+```
+
+```{r}
+# linear
+curve( exp(-1*x) , from=0 , to=4 , lty=2 ,
+    xlab="distance" , ylab="correlation" )
+# squared
+curve( exp(-1*x^2) , add=TRUE )
+```
+
+```{r}
+data(Kline2) # load the ordinary data, now with coordinates
+d <- Kline2
+d$society <- 1:10 # index observations
+m13.7 <- map2stan(
+    alist(
+        total_tools ~ dpois(lambda),
+        log(lambda) <- a + g[society] + bp*logpop,
+        g[society] ~ GPL2( Dmat , etasq , rhosq , 0.01 ),
+        a ~ dnorm(0,10),
+        bp ~ dnorm(0,1),
+        etasq ~ dcauchy(0,1),
+        rhosq ~ dcauchy(0,1)
+    ),
+    data=list(
+        total_tools=d$total_tools,
+        logpop=d$logpop,
+        society=d$society,
+        Dmat=islandsDistMatrix),
+    warmup=2000 , iter=1e4 , chains=4 )
+```
+
+```{r}
+precis(m13.7,depth=2)
+```
+
+```{r}
+post <- extract.samples(m13.7)
+# plot the posterior median covariance function
+curve( median(post$etasq)*exp(-median(post$rhosq)*x^2) , from=0 , to=10 ,
+    xlab="distance (thousand km)" , ylab="covariance" , ylim=c(0,1) ,
+    yaxp=c(0,1,4) , lwd=2 )
+# plot 100 functions sampled from posterior
+for ( i in 1:100 )
+    curve( post$etasq[i]*exp(-post$rhosq[i]*x^2) , add=TRUE ,
+        col=col.alpha("black",0.2) )
+```
+
+```{r}
+# scale point size to logpop
+psize <- d$logpop / max(d$logpop)
+psize <- exp(psize*1.5)-2
+# plot raw data and labels
+plot( d$lon2 , d$lat , xlab="longitude" , ylab="latitude" ,
+    col=rangi2 , cex=psize , pch=16 , xlim=c(-50,30) )
+labels <- as.character(d$culture)
+text( d$lon2 , d$lat , labels=labels , cex=0.7 , pos=c(2,4,3,3,4,1,3,2,4,2) )
+# overlay lines shaded by Rho
+for( i in 1:10 )
+    for ( j in 1:10 )
+      if ( i < j )
+    lines( c( d$lon2[i],d$lon2[j] ) , c( d$lat[i],d$lat[j] ) ,
+        lwd=2 , col=col.alpha("black",Rho[i,j]^2) )
+```
+
+```{r}
+sim_pancake <- function() {
+  pancake <- sample(1:3, 1)
+  sides <- matrix(c(1,1,1,0,0,0),2,3)[, pancake]
+  sample(sides)
+}
+
+pancakes <- replicate(1e4, sim_pancake())
+up <- pancakes[1, ]
+down <- pancakes[2, ]
+
+num_11_10 <- sum(up == 1)
+num_11 <- sum(up ==1 & down == 1)
+num_11 / num_11_10
+
+```
+
+
+```{r}
+library(rethinking)
+data(WaffleDivorce)
+d <- WaffleDivorce
+plot(d$Divorce ~ d$MedianAgeMarriage, ylim=c(4, 15), 
+     xlab = 'Median age marriage', 
+     ylab = 'Divoce rate')
+for (i in 1:nrow(d)) {
+  ci <- d$Divorce[i] + c(-1, 1) * d$Divorce.SE[i]
+  x <- d$MedianAgeMarriage[i]
+  lines(c(x, x), ci)
+}
+```
+
+```{r}
+dlist <- list(
+  div_obs = d$Divorce,
+  div_sd = d$Divorce.SE,
+  R = d$Marriage,
+  A = d$MedianAgeMarriage
+)
+
+m14.1 <- map2stan(
+  alist(
+    div_est ~ dnorm(mu, sigma),
+    mu <- a + bA * A + bR * R,
+    div_obs ~ dnorm(div_est, div_sd),
+    a ~ dnorm(0, 10),
+    bA ~ dnorm(0, 10),
+    bR ~ dnorm(0, 10),
+    sigma ~ dcauchy(0, 2.5)
+  ),
+  data = dlist,
+  start = list(div_est = dlist$div_obs),
+  WAIC = FALSE, iter = 5000, warmup = 1000, chains = 2, cores = 2,
+  control = list(adapt_delta = 0.95)
+)
+```
+
+
+```{r}
+precis(m14.1, depth = 2)
+```
+
+```{r}
+dlist <- list(
+    div_obs=d$Divorce,
+    div_sd=d$Divorce.SE,
+    mar_obs=d$Marriage,
+    mar_sd=d$Marriage.SE,
+    A=d$MedianAgeMarriage )
+m14.2 <- map2stan(
+    alist(
+        div_est ~ dnorm(mu,sigma),
+        mu <- a + bA*A + bR*mar_est[i],
+        div_obs ~ dnorm(div_est,div_sd),
+        mar_obs ~ dnorm(mar_est,mar_sd),
+        a ~ dnorm(0,10),
+        bA ~ dnorm(0,10),
+        bR ~ dnorm(0,10),
+        sigma ~ dcauchy(0,2.5)
+),
+data=dlist , start=list(div_est=dlist$div_obs,mar_est=dlist$mar_obs) , WAIC=FALSE , iter=5000 , warmup=1000 , chains=3 , cores=3 , control=list(adapt_delta=0.95) )
+```
+
+```{r}
+precis(m14.2)
+```
+
+
+
+```{r}
+library(rethinking)
+data(milk)
+d <- milk
+d$neocortex.prop <- d$neocortex.perc / 100
+d$logmass <- log(d$mass)
+```
+
+```{r}
+# prep data
+data_list <- list(
+    kcal = d$kcal.per.g,
+    neocortex = d$neocortex.prop,
+    logmass = d$logmass )
+# fit model
+m14.3 <- map2stan(
+    alist(
+        kcal ~ dnorm(mu,sigma),
+        mu <- a + bN*neocortex + bM*logmass,
+        neocortex ~ dnorm(nu,sigma_N),
+        a ~ dnorm(0,100),
+        c(bN,bM) ~ dnorm(0,10),
+        nu ~ dnorm(0.5,1),
+        sigma_N ~ dcauchy(0,1),
+        sigma ~ dcauchy(0,1)
+),
+data=data_list , iter=1e4 , chains=2 )
+```
+
+```{r}
+ 14.9
+# prep data
+dcc <- d[ complete.cases(d$neocortex.prop) , ]
+data_list_cc <- list(
+    kcal = dcc$kcal.per.g,
+    neocortex = dcc$neocortex.prop,
+    logmass = dcc$logmass )
+# fit model
+m14.3cc <- map2stan(
+    alist(
+        kcal ~ dnorm(mu,sigma),
+        mu <- a + bN*neocortex + bM*logmass,
+        a ~ dnorm(0,100),
+        c(bN,bM) ~ dnorm(0,10),
+        sigma ~ dcauchy(0,1)
+),
+    data=data_list_cc , iter=1e4 , chains=2 )
+precis(m14.3cc)
+```
+
+
+```{r}
+m14.4 <- map2stan(
+    alist(
+        kcal ~ dnorm(mu,sigma),
+        mu <- a + bN*neocortex + bM*logmass,
+        neocortex ~ dnorm(nu,sigma_N),
+        nu <- a_N + gM*logmass,
+        a ~ dnorm(0,100),
+        c(bN,bM,gM) ~ dnorm(0,10),
+        a_N ~ dnorm(0.5,1),
+        sigma_N ~ dcauchy(0,1),
+        sigma ~ dcauchy(0,1)
+),
+    data=data_list , iter=1e4 , chains=2 )
+precis(m14.4,depth=2)
+```
+
+```{r}
+data("islandsDistMatrix")
+Dmat <- islandsDistMatrix
+colnames(Dmat) <- c('Ml', 'Ti', 'SC', 'Ya', 'Fi', 'Tr', 'Ch', 'Mn', 'To', 'Ha')
+Dmat
+```
+
+```{r}
+data(Kline2)
+d <- Kline2
+d$society <- 1:10
+m13.7 <- map2stan(
+  alist(
+    total_tools ~ dpois(lambda),
+    log(lambda) <- a + g[society] + bp * logpop,
+    g[society] ~ GPL2(Dmat, etasq, rhosq, 0.01),
+    a ~ dnorm(0, 10),
+    bp ~ dnorm(0, 1),
+    etasq ~ dcauchy(0, 1),
+    rhosq ~ dcauchy(0, 1)
+  ),
+  data = list(
+    total_tools = d$total_tools,
+    logpop = d$logpop,
+    society = d$society,
+    Dmat = islandsDistMatrix),
+  warmup = 2000, iter = 1e4, chains = 4
+)
+```
+
+```{r}
+
+```
+

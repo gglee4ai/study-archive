@@ -1,0 +1,280 @@
+---
+title: "Caret vs. tidymodels - comparing the old and new"
+output: html_notebook
+---
+
+
+# Initial setup
+
+```{r}
+set.seed(42)
+options(max.print = 150)
+
+library(modeldata)
+library(tidymodels)
+library(tidyverse)
+library(caret)
+library(magrittr)
+library(naniar)
+library(furrr)
+library(skimr)
+library(vip)
+library(workflows)
+library(tune)
+
+library(doParallel)
+all_cores <- parallel::detectCores(logical = FALSE)
+cl <- makeForkCluster(all_cores)
+#cl <- makePSOCKcluster(all_cores)
+registerDoParallel(cl)
+foreach::getDoParWorkers()
+
+#plan(multicore)  
+data("credit_data")
+```
+
+```{r}
+credit_data <- credit_data %>% 
+  set_names(., tolower(names(.)))
+credit_data
+glimpse(credit_data)
+```
+
+```{r}
+credit_data %>% miss_var_summary()
+```
+
+```{r}
+credit_data %>% skim()
+```
+
+```{r}
+credit_data %>% 
+  count(status) %>%
+  mutate(prob = round(n / sum(n), 2))
+```
+
+
+# Data preparation
+
+```{r}
+split <- initial_split(credit_data, prop = 0.8, strata = "status")
+df_train <- training(split)
+df_train
+df_test <- testing(split)
+df_test
+```
+
+
+```{r}
+train_cv <- vfold_cv(df_train, v = 5, strata = "status")
+train_cv
+```
+
+```{r}
+train_cv_caret <- rsample2caret(train_cv)
+train_cv_caret
+```
+
+
+```{r}
+recipe <-
+  df_train %>% 
+  recipe(status ~ .) %>% 
+  step_unknown(all_nominal(), -status) %>% 
+  step_medianimpute(all_numeric()) %>% 
+  step_other(all_nominal(), -all_outcomes(), other = "infrequent_combined") %>% 
+  step_novel(all_nominal(), -all_outcomes(), new_level = "unrecorded_observation") %>% 
+  step_dummy(all_nominal(), -all_outcomes(), one_hot = TRUE)
+```
+
+```{r}
+recipe_preped <- prep(recipe, retain = TRUE)
+recipe_preped
+```
+
+```{r}
+tidy(recipe_preped)
+```
+
+
+# Fitting our models
+
+## Caret
+
+```{r}
+control_caret <-trainControl(
+  method = "cv",
+  verboseIter = FALSE,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  returnResamp = "final",
+  savePredictions = "final",
+  index = train_cv_caret$index,
+  indexOut = train_cv_caret$indexOut
+)
+
+grid_caret <- expand.grid(
+  mtry = seq(1, ncol(df_train) - 1, 3),
+  splitrule = c("extratrees", "gini"),
+  min.node.size = c(1, 3, 5)
+)
+grid_caret
+```
+
+
+```{r}
+model_caret <- train(
+  status ~ .,
+  data = juice(recipe_preped),
+  method = "ranger",
+  metric = "ROC",
+  trControl = control_caret,
+  tuneGrid = grid_caret,
+  importance = "impurity",
+  num.trees = 500
+  )
+
+print(model_caret)
+```
+
+
+```{r}
+varImp(model_caret, scale = TRUE)$importance %>% 
+  rownames_to_column() %>% 
+  arrange(-Overall)
+```
+
+
+
+```{r}
+varImp(model_caret)  # 위에 것이랑 결과 같네?
+```
+
+```{r}
+df_train_pred_caret <-
+  model_caret$pred %>% 
+  group_by(rowIndex) %>% 
+  summarise(bad = mean(bad)) %>% 
+  transmute(estimate = bad) %>% 
+  add_column(truth = df_train$status)
+
+percent(roc_auc(df_train_pred_caret, truth, estimate)$.estimate)
+```
+
+```{r}
+df_test_pred_caret <- 
+  predict(
+    model_caret,
+    newdata = bake(recipe_preped, new_data = df_test),
+    type = "prob"
+  ) %>% 
+  as_tibble() %>% 
+  transmute(estimate = bad) %>% 
+  add_column(truth = df_test$status)
+df_test_pred_caret
+```
+
+```{r}
+percent(roc_auc(df_test_pred_caret, truth, estimate)$.estimate)
+```
+
+
+## Tidymodels
+
+```{r}
+engine_tidym <-
+  rand_forest(
+    mode = "classification",
+    mtry = tune(),
+    trees = tune(),
+    min_n = tune()
+  ) %>% 
+  set_engine("ranger", importance = "impurity")
+engine_tidym
+```
+
+```{r}
+gridy_tidym <-
+  grid_random(
+    mtry() %>% range_set(c(1, 20)),
+    trees() %>% range_set(c(500, 1000)),
+    min_n() %>% range_set(c(2, 10)),
+    size = 30
+  )
+gridy_tidym
+```
+
+```{r}
+wkfl_tidym <- 
+  workflow() %>% 
+  add_recipe(recipe) %>% 
+  add_model(engine_tidym)
+wkfl_tidym
+```
+
+```{r}
+grid_tidym <- tune_grid(
+  wkfl_tidym,
+  resamples = train_cv,
+  grid = gridy_tidym,
+  metrics = metric_set(roc_auc),
+  control = control_grid(save_pred = TRUE)
+  )
+print(grid_tidym)
+```
+
+
+
+
+```{r}
+collect_metrics(grid_tidym)
+```
+
+```{r}
+show_best(grid_tidym, metric = "roc_auc")
+```
+
+```{r}
+select_best(grid_tidym, metric = "roc_auc")
+```
+
+```{r}
+grid_tidym_best <- select_best(grid_tidym, metric = "roc_auc")
+wkfl_tidym_best <- finalize_workflow(wkfl_tidym, grid_tidym_best)
+wkfl_tidym_best
+```
+
+```{r}
+wkfl_tidym_final <- last_fit(wkfl_tidym_best, split = split)
+wkfl_tidym_final
+```
+
+```{r}
+percent(show_best(grid_tidym, metric = "roc_auc", n = 1)$mean)
+```
+
+```{r}
+wkfl_tidym_final$.metrics[[1]]$.estimate[[2]]
+```
+
+```{r}
+wkfl_tidym_final$.workflow[[1]] %>% 
+  pull_workflow_fit() %>% 
+  vip()
+```
+
+
+```{r}
+vip(pull_workflow_fit(wkfl_tidym_final$.workflow[[1]]))$data
+```
+
+```{r}
+stopCluster(cl)
+```
+
+
+
+
+
+

@@ -1,0 +1,92 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(rstan)
+library(brms)
+```
+
+```{r}
+d <- read_csv("../chap04/input/data-salary.txt")
+d
+```
+
+
+```{r}
+d %>% 
+  ggplot(aes(X, Y)) +
+  geom_point() +
+  theme_bw()
+```
+
+```{r}
+res_lm <- lm(Y ~ X, data = d)
+res_lm
+```
+
+
+```{r}
+X_new <- tibble(X = 23:60)
+conf_95 <- predict(res_lm, newdata = X_new, interval = "confidence", level = 0.95)
+pred_95 <- predict(res_lm, newdata = X_new, interval = "prediction", level = 0.95)
+```
+
+
+```{r}
+X_new %>% 
+  bind_cols(as_tibble(conf_95)) %>% 
+  bind_cols(as_tibble(pred_95)) %>% 
+  rename(
+    fit = fit...2,
+    conf_lb = lwr...3,
+    conf_ub = upr...4,
+    pred_lb = lwr...6,
+    pred_ub = upr...7
+  ) %>% 
+  select(-fit...5) %>% 
+  ggplot(aes(X)) +
+  geom_line(aes(y = fit)) +
+  geom_ribbon(aes(ymin = conf_lb, ymax = conf_ub), alpha = 0.2) +
+  geom_ribbon(aes(ymin = pred_lb, ymax = pred_ub), alpha = 0.2) +
+  geom_point(aes(X, Y), data = d)
+```
+
+
+## brm
+
+```{r}
+bit <- brm(Y ~ X, data = d, seed = 1234, file = 'fit4.5.rds')
+bit
+```
+
+
+```{r}
+plot(bit)
+```
+
+```{r}
+predict(bit, newdata = X_new)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

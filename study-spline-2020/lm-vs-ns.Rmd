@@ -1,0 +1,150 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(fpp2)
+```
+
+
+```{r}
+ausair
+```
+
+
+```{r}
+air <- window(ausair, start=1990)
+air
+```
+
+```{r}
+fc <- holt(air, h=5)
+fc
+```
+
+
+
+
+
+
+
+```{r}
+fc <- holt(air, h=15)
+fc2 <- holt(air, damped=TRUE, phi = 0.80, h=15)
+autoplot(air) +
+  autolayer(fc, series="홀트 기법", PI=FALSE) +
+  autolayer(fc2, series="감쇠 홀트 기법", PI=FALSE) +
+  ggtitle("홀트 기법으로 얻은 예측값") + xlab("연도") +
+  ylab("호주 항공객 (백만 명)") +
+  guides(colour=guide_legend(title="예측값"))
+```
+
+
+
+```{r}
+library(tibble)
+df <- tibble(x = c(1, 1, 3, 3, 5), y = c(2, 2.1, 1.3, 1.1, 1.2))
+df
+```
+
+```{r}
+df %>% 
+  ggplot(aes(x, y)) +
+  geom_point()
+```
+
+```{r}
+fit1 <- lm(y ~ x + I(x^2), data = df)
+summary(fit1)
+predict(fit1, newdata = data.frame(x = 0:5))
+```
+
+
+
+```{r}
+fit0 <- lm(y ~ x, data = df)
+summary(fit0)
+p_fit0 <- predict(fit0, newdata = data.frame(x = 0:5))
+```
+
+
+
+
+
+```{r}
+library(splines)
+fit2 <- lm(y ~ ns(x, df = 2), data = df)
+summary(fit2)
+p_fit2 <- predict(fit2, newdata = data.frame(x = 0:5))
+```
+
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+df2 <- tibble(x = 0:5) %>% 
+  bind_cols(y0 = p_fit0) %>% 
+  bind_cols(y2 = p_fit2) -> df2
+df2
+```
+
+```{r}
+df2 %>% 
+  ggplot(aes(x)) + 
+  geom_line(aes(y = y0), color = 4) +
+  geom_line(aes(y = y2), color = 2) +
+  geom_point(aes(x, y), data = df)
+```
+
+
+
+
+
+```{r}
+x <- 1:100         # independent variable
+k <- c(25, 50, 75) # 3 interior knots
+
+# function to construct variables x2, x3, x4
+u <- function(x)ifelse(x > 0, x, 0)
+
+x2 <- u(x - k[1])
+x3 <- u(x - k[2])
+x4 <- u(x - k[3])
+
+# generate data
+set.seed(1)
+y <- 0.8 + 1*x + -1.2*x2 + 1.4*x3 + -1.6*x4 + rnorm(100,sd = 2.2)
+plot(x, y)
+```
+
+
+```{r}
+df <- tibble(x = x, y = y)
+fit_ns <- lm(y ~ ns(x, df = 1), data = df)
+plot(x, y)
+points(x, predict(fit_ns), col = 2)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

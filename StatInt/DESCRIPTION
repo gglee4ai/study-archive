@@ -1,0 +1,16 @@
+Package: StatInt
+Title: Probability Distribution Functions for the Second Edition of
+        Statistical Intervals
+Version: 1.0.35
+Date: 2017-03-19
+Authors@R: person("William", "Meeker", email = "wqmeeker@iastate.edu", role = c("aut", "cre"))
+Maintainer: William Meeker <wqmeeker@iastate.edu>
+Description: A collection of functions (pdf, cdf, and quantile) for probability distributions that are used in the Second Edition of Statistical Intervals by Meeker, Hahn, and Escobar (2017). These probability distribution functions are similar to other probability distribution functions in R, but for distributions not included in R. These include the smallest extreme (aka, Type 1 or Gumbel smallest extreme value) distribution, the largest extreme (aka, Type 1 or Gumbel largest extreme value) distribution, the  Frechet distribution (the reciprocal of a Weibull random variable has a Frechet distribution), the loglogistic distribution (the relationship between the logistic and loglogistic and other log-distributions is similar to the relationship between the normal and the lognnormal distribution), the log-cauchy distribution, the log-uniform distribution, the beta-binomial distribution, the hypergeometric distribution with a parameterization (size, D, N) that differs from that used in R, and the negative-hypergeometric dstribution (with the same parameterization as the included hypergeometric distribution). The package also contains functions to compute a few particular kinds of statistical intervals for a normal distribution. In particular there are functions to compute a two-sided tolerance interval for the normal distribution, two-sided confidence intervals or one-sided confidence bounds for a normal distribution quantile, as well as two-sided confidence intervals or one-sided confidence bounds for a normal distribution tail probability.
+Depends: R (>= 3.0.0)
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 6.0.1
+NeedsCompilation: yes
+Packaged: 2017-03-19 14:45:07 UTC; wqmeeker
+Author: William Meeker [aut, cre]

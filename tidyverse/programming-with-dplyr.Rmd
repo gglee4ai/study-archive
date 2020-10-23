@@ -1,0 +1,76 @@
+---
+title: "Programming with dplyr"
+date: 2020-06-01
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+data(mtcars)
+```
+
+```{r}
+var_summary <- function(data, var) {
+  data %>% 
+    summarize(n = n(), min = min({{ var }}), max = max({{ var }}))
+}
+
+mtcars %>% 
+  group_by(cyl) %>% 
+  var_summary(mpg)
+```
+
+```{r}
+for (var in names(mtcars)) {
+  mtcars %>% count(.data[[var]]) %>% arrange(desc(n)) %>% print()
+  # mtcars %>% count({{ var }}) %>% arrange(desc(n)) %>% print()
+}
+```
+
+
+
+```{r}
+vars <- c("mpg", "vs")
+mtcars %>% select(all_of(vars))
+mtcars %>% select(!all_of(vars))
+```
+
+```{r}
+mutate_y <- function(data) {
+  mutate(data, y = a + x)
+}
+```
+
+```{r}
+# You’ll get an R CMD CHECK NOTE:
+my_summary_function <- function(data) {
+  data %>% 
+    filter(x > 0) %>% 
+    group_by(grp) %>% 
+    summarize(y = mean(y), n = n())
+}
+```
+
+```{r}
+#' @importFrom rlang .data
+my_summary_function <- function(data) {
+  data %>% 
+    filter(.data$x > 0) %>% 
+    group_by(.data$grp) %>% 
+    summarize(y = mean(.data$y), n = n())
+}
+```
+
+```{r}
+my_summarise <- function(data, group_var) {
+  data %>% 
+    group_by({{ group_var }}) %>% 
+    summarize(mean = mean(mass))
+}
+```
+
+
+

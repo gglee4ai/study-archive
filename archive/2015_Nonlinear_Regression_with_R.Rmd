@@ -1,0 +1,69 @@
+---
+title: "Nonlinear Regression with R"
+author: "gglee"
+date: "June 23, 2015"
+output: html_document
+---
+
+```{r libraries}
+library(nlme)
+library(lattice)
+```
+
+8.1 Fitting grouped data Models
+```{r data plotting}
+xyplot(rate ~ conc | state, data = Puromycin,
+       xlab = "Substrate concentration (ppm)",
+       ylab = "Reaction rates\n(counts/min/min)")
+```
+
+
+```{r 8.1.1 Using nls}
+Puromycin.m1 <- nls(rate ~ Vm[state] * conc / (K[state] + conc), 
+                    data = Puromycin,
+                    start = list(K = c(0.1, 0.1), Vm = c(200, 200)))
+summary(Puromycin.m1)
+```
+
+```{r 8.1.2 Using gnls()}
+Puromycin.m2 <- gnls(rate ~ Vm * conc / (K + conc),
+                      data = Puromycin,
+                      start = list(Vm = c(200, 200), K = c(0.1, 0.1)),
+                      params = list(Vm ~ state - 1, K ~ state - 1))
+summary(Puromycin.m2)
+```
+
+```{r 8.1.2 Using nlsList()}
+Puromycin.m3 <- nlsList(rate ~ SSmicmen(conc, Vm, K) | state,
+                        data = Puromycin)
+summary(Puromycin.m3)
+Puromycin2 <- groupedData(rate ~ conc | state, data = Puromycin)
+Puromycin.m4 <- nlsList(rate ~ SSmicmen(conc, a, b), data = Puromycin2)
+summary(Puromycin.m4)
+```
+
+```{r 8.2.1 Comparison of entire groups}
+Puromycin.m5 <- nls(rate ~ Vm * conc / (K + conc), 
+                    data = Puromycin,
+                    start = list(K = 0.1, Vm = 200))
+summary(Puromycin.m5)
+anova(Puromycin.m5, Puromycin.m1)
+```
+
+```{r 8.2.2 Comparison of specific parameters}
+# Comparision of K
+Puromycin.m6 <- nls(rate ~ Vm * conc / (K[state] + conc), 
+                    data = Puromycin,
+                    start = list(K = c(0.1, 0.1), Vm = 200))
+summary(Puromycin.m6)
+anova(Puromycin.m6, Puromycin.m1)
+
+# Comparision of Vm
+Puromycin.m7 <- nls(rate ~ Vm[state] * conc / (K + conc), 
+                    data = Puromycin,
+                    start = list(K = 0.1, Vm = c(200, 200)))
+summary(Puromycin.m7)
+anova(Puromycin.m7, Puromycin.m1)
+
+```
+

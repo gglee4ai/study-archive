@@ -1,0 +1,86 @@
+---
+title: "ploty test"
+output: html_notebook
+---
+
+
+```{r}
+library(plotly)
+```
+
+```{r}
+volcano
+```
+
+
+```{r}
+fig <- plot_ly(z = ~ volcano)
+fig <- fig %>% add_surface()
+fig
+```
+
+```{r}
+library(plotly)
+# volcano is a numeric matrix that ships with R
+fig <- plot_ly(z = ~volcano) %>% add_surface(
+  contours = list(
+    z = list(
+      show=TRUE,
+      usecolormap=TRUE,
+      highlightcolor="#ff0000",
+      project=list(z=TRUE)
+      )
+    )
+  )
+fig <- fig %>% layout(
+    scene = list(
+      camera=list(
+        eye = list(x=1.87, y=0.88, z=-0.64)
+        )
+      )
+  )
+
+fig
+```
+
+
+
+
+
+# 3D mesh plots in R
+
+```{r}
+library(plotly)
+
+xyz <- expand.grid(x = seq(0, 100, length.out = 100), y= seq(0, 100, length.out = 100))
+xyz <- xyz %>% 
+  mutate(z = rnorm(1, 0, 10))
+
+
+fig <- plot_ly(xyz, x = ~x, y = ~y, z = ~z, type = 'scatter3d')
+
+fig
+```
+
+```{r}
+library(plotly)
+set.seed(123)
+
+# Create Random Data
+ds <- diamonds[sample(1:nrow(diamonds), size = 1000),]
+
+scene = list(camera = list(eye = list(x = -1.25, y = 1.25, z = 1.25)))
+
+plot_ly(ds, x = ~carat, y = ~cut, z = ~price, group = ~color, type = "scatter3d", mode = "markers",
+        marker = list(opacity = 0.6, size = 4)) %>% 
+  layout(title = "3D Scatter plot", scene = scene)
+```
+```{r}
+ds
+```
+
+```{r}
+library("scatterplot3d")
+scatterplot3d(iris[,1:3], angle = 100)
+```
+
