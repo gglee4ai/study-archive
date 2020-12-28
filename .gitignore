@@ -1,13 +1,9 @@
-# MY setting
-.DS_Store
-*.html
-*.pdf
-*.swp
-*.png
-~$*
-ref
-Thumbs.db
+# My ignores
 
+# My temp files
+*.swp
+~$*
+Thumbs.db
 
 # History files
 .Rhistory
